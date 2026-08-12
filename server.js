@@ -73,6 +73,30 @@ async function inspectWallets(primary) {
   }));
 }
 
+async function inspectChain(primary) {
+  if (!primary) return {available:false};
+  try {
+    const [supply, validators, production, balances] = await Promise.all([
+      rpc(primary.rpcUrl, 'ieum_supplyStatus'),
+      rpc(primary.rpcUrl, 'ieum_validatorStatus', [Number(config.validatorWindow) || 1000]),
+      rpc(primary.rpcUrl, 'ieum_blockProductionStatus', [Number(config.productionWindow) || 100]),
+      rpc(primary.rpcUrl, 'ieum_addressBalances', [0, Math.min(Number(config.accountLimit) || 100, 1000)])
+    ]);
+    const decimals = supply.result.decimals ?? config.unitDecimals ?? 18;
+    return {
+      available:true,
+      supply:{...supply.result,totalIssuedFormatted:formatUnits(supply.result.totalIssued,decimals),
+        circulatingFormatted:formatUnits(supply.result.circulating,decimals),lockedFormatted:formatUnits(supply.result.locked,decimals)},
+      validators:validators.result,
+      production:production.result,
+      accounts:{...balances.result,accounts:(balances.result.accounts || []).map(account=>({...account,
+        balanceFormatted:formatUnits(account.balance,decimals)}))}
+    };
+  } catch (error) {
+    return {available:false,error:error.message};
+  }
+}
+
 async function recentFlow(primary, tip) {
   if (!primary || !Number.isFinite(tip)) return [];
   const count = Math.min(Math.max(Number(config.historyBlocks)||20,1),100);
@@ -87,7 +111,7 @@ async function recentFlow(primary, tip) {
   }))).slice(0,200);
 }
 
-function buildAlerts(nodes) {
+function buildAlerts(nodes, chain) {
   const alerts=[]; const online=nodes.filter(n=>n.online);
   nodes.filter(n=>!n.online).forEach(n=>alerts.push({level:'critical',message:`${n.name} RPC 응답 없음: ${n.error}`}));
   if (online.length) {
@@ -97,6 +121,11 @@ function buildAlerts(nodes) {
     if (identities.size>1) alerts.push({level:'critical',message:'노드 간 chainId 또는 genesisHash 불일치'});
     online.filter(n=>n.status.syncing).forEach(n=>alerts.push({level:'warning',message:`${n.name} 동기화 진행 중`}));
     online.filter(n=>n.status.peers<1).forEach(n=>alerts.push({level:'warning',message:`${n.name} 연결 피어 없음`}));
+  }
+  if (chain?.available) {
+    (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>0 && v.signingRatePercent<95)
+      .forEach(v=>alerts.push({level:v.signingRatePercent<80?'critical':'warning',message:`검증자 ${v.id} 서명률 ${v.signingRatePercent.toFixed(2)}%`}));
+    if ((chain.production?.averageBlockTimeSeconds || 0)>6) alerts.push({level:'warning',message:`평균 블록 생성 시간이 ${chain.production.averageBlockTimeSeconds.toFixed(2)}초입니다.`});
   }
   return alerts;
 }
@@ -108,9 +137,9 @@ async function snapshot() {
   cache.pending=(async()=>{
     const nodes=await Promise.all(config.nodes.map(inspectNode));
     const primary=nodes.find(n=>n.online); const tip=primary?.status?.height;
-    const [wallets,transactions]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip)]);
+    const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      nodes,wallets,transactions,alerts:buildAlerts(nodes),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.2.0',chainVersion:'0.22.1',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;

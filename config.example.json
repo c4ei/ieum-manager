@@ -1,6 +1,9 @@
 {
   "refreshSeconds": 10,
   "historyBlocks": 40,
+  "validatorWindow": 1000,
+  "productionWindow": 100,
+  "accountLimit": 100,
   "unitDecimals": 18,
   "unitSymbol": "IEUM",
   "nodes": [

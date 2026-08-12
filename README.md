@@ -1,6 +1,6 @@
-# IEUM Manager 0.1.0
+# IEUM Manager 0.2.0
 
-IEUM Chain 4개 운영 노드를 한 화면에서 확인하는 읽기 전용 관제 웹입니다. `ieum-chain v0.21.13`의 실제 JSON-RPC(`ieum_nodeStatus`, `ieum_networkIdentity`, `ieum_protocolVersion`, `ieum_finalizedBlock`, `ieum_getStorageStatus`, `txpool_status`, Ethereum 호환 조회 메서드)에 맞춰 작성되었습니다.
+IEUM Chain 4개 운영 노드를 한 화면에서 확인하는 읽기 전용 관제 웹입니다. `ieum-chain v0.22.1`의 실제 JSON-RPC에 맞춰 작성되었습니다.
 
 ## 1차 제공 범위
 
@@ -8,10 +8,14 @@ IEUM Chain 4개 운영 노드를 한 화면에서 확인하는 읽기 전용 관
 - chainId/genesisHash 불일치, 노드 중단, 높이 지연, 동기화, 피어 0 자동 경보
 - 지정한 운영 지갑의 잔액과 nonce
 - 최근 최대 100개 블록의 거래·잔고 흐름
+- 총발행량·유통량·잠금 잔액과 잠금 주소 수
+- 전체 주소 잔액 인덱스(화면 표시량 설정 가능, 최대 1,000개)
+- validator별 최근 확정 인증서 서명률
+- 평균 블록 생성 시간·지연 구간·추정 누락 슬롯
 - 브라우저에서 RPC에 직접 접속하지 않는 서버 프록시 구조
 - 쓰기/송금/personal RPC가 전혀 없는 읽기 전용 UI
 
-> 현재 체인 RPC에는 전체 발행량과 모든 주소 목록을 집계하는 API가 없습니다. 따라서 "전체 잔액"은 `config.json`에 등록한 관리 주소 합계까지 정확하게 제공할 수 있고, 전 계정 총공급량은 체인 코어에 별도 RPC를 추가해야 합니다.
+금액은 체인 RPC가 반환하는 10진 문자열 wei를 서버에서 안전하게 변환합니다. 브라우저의 JavaScript 정밀도 손실을 피하며 1 IEUM은 `10^18 wei`입니다.
 
 ## 설치
 
@@ -50,6 +54,15 @@ sudo journalctl -u ieum-manager -n 100 --no-pager
 curl -s http://127.0.0.1:8787/api/snapshot
 ```
 
+## v0.22.1 호환 관리 RPC
+
+- `ieum_supplyStatus`
+- `ieum_addressBalances`
+- `ieum_validatorStatus`
+- `ieum_blockProductionStatus`
+
+구형 노드가 섞여 있으면 기본 노드 관제는 유지되고 새 체인 지표 영역에 호환성 오류가 표시됩니다. 네 노드를 모두 v0.22.1로 올린 뒤 사용하세요.
+
 ## 다음 단계
 
-2차에서는 코어에 `ieum_supplyStatus`, validator set/서명률, 블록 생성 시간, 체인 전체 주소별 잔액 인덱스 API를 먼저 추가한 뒤 Prometheus/Grafana 장기 추세, 알림 전송, 감사 로그를 연결하는 것이 안전합니다. 노드 재시작·업데이트·송금 같은 쓰기 기능은 별도 권한과 재인증, 승인 절차가 마련된 후 분리해 추가해야 합니다.
+Prometheus/Grafana 장기 추세와 Alertmanager 알림을 함께 운영하고, 관리 웹에는 WebAuthn MFA와 역할 권한을 추가하는 것이 다음 단계입니다. 노드 재시작·업데이트·송금 같은 쓰기 기능은 별도 권한과 재인증, 이중 승인 절차가 마련된 후 분리해 추가해야 합니다.
