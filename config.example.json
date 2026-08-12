@@ -1,0 +1,15 @@
+{
+  "refreshSeconds": 10,
+  "historyBlocks": 40,
+  "unitDecimals": 18,
+  "unitSymbol": "IEUM",
+  "nodes": [
+    {"id":"node-1","name":"Main Node 1","rpcUrl":"http://127.0.0.1:8989"},
+    {"id":"node-2","name":"Main Node 2","rpcUrl":"http://127.0.0.1:8990"},
+    {"id":"node-3","name":"Main Node 3","rpcUrl":"http://127.0.0.1:8991"},
+    {"id":"node-4","name":"Main Node 4","rpcUrl":"http://127.0.0.1:8992"}
+  ],
+  "wallets": [
+    {"name":"운영 지갑","address":"0x여기에_주소를_입력"}
+  ]
+}

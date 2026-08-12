@@ -1,0 +1,16 @@
+manager.example.com {
+    tls admin@example.com
+    encode zstd gzip
+
+    # caddy hash-password 명령으로 만든 해시를 사용하세요.
+    basic_auth {
+        admin $2a$14$REPLACE_WITH_CADDY_HASH
+    }
+
+    reverse_proxy 127.0.0.1:8787
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        -Server
+    }
+}

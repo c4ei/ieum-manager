@@ -1,0 +1,8 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IEUM Manager</title><link rel="stylesheet" href="/styles.css"></head><body>
+<aside><div class="brand"><i>IE</i><div><b>IEUM</b><span>CHAIN MANAGER</span></div></div><nav><a class="active">관제 대시보드</a><a href="#nodes">노드 상태</a><a href="#wallets">관리 지갑</a><a href="#flow">잔고 흐름</a></nav><div class="secure">READ ONLY<br><small>운영 키를 사용하지 않습니다</small></div></aside>
+<main><header><div><p class="eyebrow">NETWORK OPERATIONS CENTER</p><h1>이음 체인 운영 현황</h1></div><div class="live"><span></span> LIVE · <time id="updated">연결 중</time></div></header>
+<section id="summary" class="cards"></section><section id="alerts"></section>
+<section id="nodes"><div class="section-title"><div><p class="eyebrow">VALIDATOR FLEET</p><h2>메인 노드</h2></div></div><div id="node-grid" class="node-grid"></div></section>
+<section id="wallets"><div class="section-title"><div><p class="eyebrow">TREASURY WATCH</p><h2>관리 지갑 잔액</h2></div><small>등록 주소만 조회 · 서명 및 송금 불가</small></div><div class="panel table-wrap"><table><thead><tr><th>이름</th><th>주소</th><th>잔액</th><th>Nonce</th><th>상태</th></tr></thead><tbody id="wallet-body"></tbody></table></div></section>
+<section id="flow"><div class="section-title"><div><p class="eyebrow">LEDGER FLOW</p><h2>최근 온체인 흐름</h2></div><small>최근 설정 블록 범위</small></div><div class="panel table-wrap"><table><thead><tr><th>블록</th><th>보낸 주소</th><th>받는 주소</th><th>수량</th><th>거래 해시</th></tr></thead><tbody id="tx-body"></tbody></table></div></section>
+<footer>IEUM Manager v0.1.0 · Read-only operations console</footer></main><script type="module" src="/app.js"></script></body></html>
