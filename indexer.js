@@ -47,8 +47,32 @@ async function refreshBalances(url) {
   }
 }
 
+async function ensureChainIdentity(url, tip) {
+  const genesis=(await rpc(url,'eth_getBlockByNumber',['0x0',false],10000)).result;
+  if (!genesis?.hash) throw new Error('genesis block 0 not found');
+  const state=await query("SELECT key,value FROM explorer_state WHERE key IN ('genesis_hash','last_height')");
+  const values=new Map(state.rows.map(row=>[row.key,row.value]));
+  const previousGenesis=values.get('genesis_hash');
+  const previousHeight=Number(values.get('last_height') ?? -1);
+  if ((previousGenesis && previousGenesis !== genesis.hash) || previousHeight > tip) {
+    const client=await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM token_transfers');
+      await client.query('DELETE FROM blocks');
+      await client.query('DELETE FROM address_balances');
+      await client.query("DELETE FROM explorer_state WHERE key='last_height'");
+      await client.query('COMMIT');
+      console.warn(new Date().toISOString(),'chain reset detected; explorer index cleared');
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+  }
+  await query(`INSERT INTO explorer_state(key,value) VALUES('genesis_hash',$1)
+    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`,[genesis.hash]);
+}
+
 async function cycle() {
   const url=await primaryRpc(); const tip=toNumber((await rpc(url,'eth_blockNumber')).result)-confirmations;
+  await ensureChainIdentity(url,tip);
   for (const node of config.nodes) {
     try {
       const status=(await rpc(node.rpcUrl,'ieum_nodeStatus')).result;
