@@ -4,7 +4,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = new URL('.', import.meta.url).pathname;
-const host = process.env.IEUM_MANAGER_HOST || '127.0.0.1';
+const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
 const port = Number(process.env.IEUM_MANAGER_PORT || 8787);
 const configPath = process.env.IEUM_MANAGER_CONFIG || join(root, 'config.json');
 const config = JSON.parse(await readFile(configPath, 'utf8'));
