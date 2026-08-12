@@ -1,0 +1,21 @@
+[Unit]
+Description=IEUM Chain Explorer Indexer
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ieum-manager
+Group=ieum-manager
+WorkingDirectory=/opt/ieum-manager
+EnvironmentFile=-/etc/ieum-manager.env
+ExecStart=/usr/bin/node /opt/ieum-manager/indexer.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

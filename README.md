@@ -3,9 +3,31 @@
 <img width="1372" height="965" alt="image" src="https://github.com/user-attachments/assets/1b615557-0b61-44dd-abc5-5774311581ce" />
 
 
-# IEUM Manager 0.2.0
+# IEUM Manager 0.3.0
 
-IEUM Chain 4개 운영 노드를 한 화면에서 확인하는 읽기 전용 관제 웹입니다. `ieum-chain v0.22.1`의 실제 JSON-RPC에 맞춰 작성되었습니다.
+IEUM Chain 운영 관제와 PostgreSQL 기반 블록 익스플로러를 제공하는 읽기 전용 웹입니다. `ieum-chain v0.22.1`의 실제 JSON-RPC에 맞춰 작성되었습니다.
+
+## v0.3.0 Explorer
+
+- 블록, 트랜잭션 해시, 주소 검색
+- 최근 블록·거래와 주소별 송수신 이력
+- Top 100 보유 주소
+- 토큰/NFT 표준 연동 준비 API와 UI
+- 설정 노드 및 향후 `ieum_peerInfo` 피어 자동 발견
+- PostgreSQL 17 + Manager + Indexer Docker Compose
+
+Docker 설치가 권장됩니다.
+
+```bash
+cp .env.example .env
+cp config.example.json config.json
+nano .env
+nano config.json
+docker compose up -d --build
+docker compose logs -f indexer
+```
+
+상세 변경과 체인 코어 추가 요구사항은 `docs/IEUM_Manager_v0.3.0_Explorer_변경내역.md`를 참고하세요.
 
 ## 1차 제공 범위
 

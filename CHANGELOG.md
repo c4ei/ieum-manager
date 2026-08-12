@@ -1,5 +1,15 @@
 # IEUM Manager 변경 내역
 
+## 0.3.0 - 2026-08-12
+
+- PostgreSQL 블록/트랜잭션/주소 인덱서 추가
+- 블록 높이, 트랜잭션 해시, 주소 검색 UI와 API 추가
+- Top 100 보유 주소, 최근 블록/거래 화면 추가
+- 토큰 및 NFT 표준 연동 준비 스키마/API/UI 추가
+- 설정 노드 수 자동 확장 및 `ieum_peerInfo` 동적 피어 수집 준비
+- PostgreSQL 17, Manager, Indexer Docker Compose 추가
+- 체인 코어 후속 요구사항과 운영 문서 추가
+
 ## 0.2.0 - 2026-08-12
 
 - IEUM Chain v0.22.1 호환

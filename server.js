@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {query,dbReady} from './lib/db.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
@@ -11,6 +12,47 @@ const config = JSON.parse(await readFile(configPath, 'utf8'));
 const timeoutMs = Number(process.env.IEUM_RPC_TIMEOUT_MS || 4000);
 let rpcId = 0;
 let cache = { at: 0, data: null, pending: null };
+
+const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));};
+const limitOf=(url,fallback=25,max=100)=>Math.min(Math.max(Number(url.searchParams.get('limit'))||fallback,1),max);
+const offsetOf=url=>Math.max(Number(url.searchParams.get('offset'))||0,0);
+const validHash=value=>/^0x[0-9a-f]{64}$/i.test(value||'');
+const validAddress=value=>/^0x[0-9a-f]{40}$/i.test(value||'');
+
+async function explorerApi(req,res,url){
+  if(!await dbReady()) return json(res,503,{error:'익스플로러 데이터베이스 연결 대기 중'});
+  const path=url.pathname;
+  if(path==='/api/explorer/status'){
+    const [blocks,txs,addresses,state]=await Promise.all([query('SELECT count(*) count,max(height) height FROM blocks'),query('SELECT count(*) count FROM transactions'),query('SELECT count(*) count FROM address_balances'),query("SELECT value,updated_at FROM explorer_state WHERE key='last_height'")]);
+    return json(res,200,{blocks:blocks.rows[0],transactions:txs.rows[0].count,addresses:addresses.rows[0].count,indexer:state.rows[0]||null});
+  }
+  if(path==='/api/explorer/blocks'){
+    const rows=await query('SELECT height,hash,parent_hash,producer,timestamp,tx_count,size_bytes FROM blocks ORDER BY height DESC LIMIT $1 OFFSET $2',[limitOf(url),offsetOf(url)]);return json(res,200,{items:rows.rows});
+  }
+  if(path==='/api/explorer/transactions'){
+    const rows=await query(`SELECT t.hash,t.block_height,t.tx_index,t.sender,t.recipient,t.value,t.fee,t.nonce,b.timestamp FROM transactions t JOIN blocks b ON b.height=t.block_height ORDER BY t.block_height DESC,t.tx_index DESC LIMIT $1 OFFSET $2`,[limitOf(url),offsetOf(url)]);return json(res,200,{items:rows.rows});
+  }
+  if(path==='/api/explorer/top-addresses'){
+    const rows=await query('SELECT address,balance,locked,tx_count,last_seen_height FROM address_balances ORDER BY balance DESC LIMIT $1',[limitOf(url,100,100)]);return json(res,200,{items:rows.rows});
+  }
+  if(path==='/api/explorer/search'){
+    const term=(url.searchParams.get('q')||'').trim();
+    if(/^\d+$/.test(term)) return json(res,200,{type:'block',target:`/api/explorer/block/${term}`});
+    if(validHash(term)) return json(res,200,{type:'transaction',target:`/api/explorer/transaction/${term}`});
+    if(validAddress(term)) return json(res,200,{type:'address',target:`/api/explorer/address/${term}`});
+    return json(res,400,{error:'블록 높이, 트랜잭션 해시 또는 주소를 입력하세요.'});
+  }
+  let match=path.match(/^\/api\/explorer\/block\/(\d+)$/);
+  if(match){const block=await query('SELECT * FROM blocks WHERE height=$1',[match[1]]);if(!block.rows[0])return json(res,404,{error:'블록을 찾을 수 없습니다.'});const txs=await query('SELECT * FROM transactions WHERE block_height=$1 ORDER BY tx_index',[match[1]]);return json(res,200,{...block.rows[0],transactions:txs.rows});}
+  match=path.match(/^\/api\/explorer\/transaction\/(0x[0-9a-f]{64})$/i);
+  if(match){const row=await query(`SELECT t.*,b.timestamp,b.hash block_hash FROM transactions t JOIN blocks b ON b.height=t.block_height WHERE lower(t.hash)=lower($1)`,[match[1]]);return row.rows[0]?json(res,200,row.rows[0]):json(res,404,{error:'트랜잭션을 찾을 수 없습니다.'});}
+  match=path.match(/^\/api\/explorer\/address\/(0x[0-9a-f]{40})$/i);
+  if(match){const [account,txs]=await Promise.all([query('SELECT * FROM address_balances WHERE lower(address)=lower($1)',[match[1]]),query(`SELECT t.*,b.timestamp FROM transactions t JOIN blocks b ON b.height=t.block_height WHERE lower(sender)=lower($1) OR lower(recipient)=lower($1) ORDER BY block_height DESC,tx_index DESC LIMIT $2 OFFSET $3`,[match[1],limitOf(url),offsetOf(url)])]);return account.rows[0]?json(res,200,{account:account.rows[0],transactions:txs.rows}):json(res,404,{error:'주소를 찾을 수 없습니다.'});}
+  if(path==='/api/explorer/tokens'){const rows=await query("SELECT * FROM tokens WHERE standard='IEUM-20' ORDER BY verified DESC,name LIMIT $1 OFFSET $2",[limitOf(url),offsetOf(url)]);return json(res,200,{supported:false,reason:'IEUM Chain 토큰 이벤트 RPC 추가 후 자동 인덱싱됩니다.',items:rows.rows});}
+  if(path==='/api/explorer/nfts'){const rows=await query("SELECT * FROM tokens WHERE standard IN ('IEUM-721','IEUM-1155') ORDER BY verified DESC,name LIMIT $1 OFFSET $2",[limitOf(url),offsetOf(url)]);return json(res,200,{supported:false,reason:'IEUM Chain NFT 표준 및 이벤트 RPC 추가 후 자동 인덱싱됩니다.',items:rows.rows});}
+  if(path==='/api/explorer/nodes'){const rows=await query('SELECT * FROM discovered_nodes ORDER BY online DESC,name');return json(res,200,{discoveryMode:'configured+peer-rpc-ready',items:rows.rows});}
+  return json(res,404,{error:'API not found'});
+}
 
 export function hexToBigInt(value) {
   if (typeof value !== 'string' || !/^0x[0-9a-f]+$/i.test(value)) throw new Error('invalid hex quantity');
@@ -139,7 +181,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.2.0',chainVersion:'0.22.1',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.0',chainVersion:'0.22.1',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -152,6 +194,7 @@ export const server=http.createServer(async(req,res)=>{
   res.setHeader('x-content-type-options','nosniff'); res.setHeader('referrer-policy','no-referrer');
   res.setHeader('content-security-policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:");
   if(req.url==='/api/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true}));}
+  if(req.url.startsWith('/api/explorer/')){try{return await explorerApi(req,res,new URL(req.url,'http://localhost'));}catch(error){return json(res,500,{error:error.message});}}
   if(req.url==='/api/snapshot'){
     try{res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});return res.end(JSON.stringify(await snapshot()));}
     catch(error){res.writeHead(503,{'content-type':'application/json'});return res.end(JSON.stringify({error:error.message}));}
