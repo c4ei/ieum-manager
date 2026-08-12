@@ -1,3 +1,8 @@
+
+
+<img width="1372" height="965" alt="image" src="https://github.com/user-attachments/assets/1b615557-0b61-44dd-abc5-5774311581ce" />
+
+
 # IEUM Manager 0.2.0
 
 IEUM Chain 4개 운영 노드를 한 화면에서 확인하는 읽기 전용 관제 웹입니다. `ieum-chain v0.22.1`의 실제 JSON-RPC에 맞춰 작성되었습니다.
