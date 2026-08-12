@@ -203,7 +203,8 @@ export const server=http.createServer(async(req,res)=>{
     try{res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});return res.end(JSON.stringify(await snapshot()));}
     catch(error){res.writeHead(503,{'content-type':'application/json'});return res.end(JSON.stringify({error:error.message}));}
   }
-  const requested=req.url==='/'?'index.html':req.url.split('?')[0].replace(/^\//,'');
+  const pathname = new URL(req.url, 'http://localhost').pathname;
+  const requested = pathname === '/' ? 'index.html' : pathname.replace(/^\//, '');
   const safe=normalize(requested).replace(/^(\.\.(\/|\\|$))+/,''); const path=join(root,'public',safe);
   try{const body=await readFile(path);res.writeHead(200,{'content-type':mime[extname(path)]||'application/octet-stream','cache-control':'public, max-age=300'});res.end(body);}
   catch{res.writeHead(404);res.end('Not found');}
