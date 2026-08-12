@@ -2,12 +2,13 @@
 
 <img width="1372" height="965" alt="image" src="https://github.com/user-attachments/assets/1b615557-0b61-44dd-abc5-5774311581ce" />
 
+# IEUM Manager 0.3.1
 
-# IEUM Manager 0.3.0
+IEUM Chain 운영 관제와 PostgreSQL 기반 블록 익스플로러를 제공하는 읽기 전용 웹입니다. `ieum-chain v0.22.2`의 실제 JSON-RPC에 맞춰 작성되었습니다.
 
-IEUM Chain 운영 관제와 PostgreSQL 기반 블록 익스플로러를 제공하는 읽기 전용 웹입니다. `ieum-chain v0.22.1`의 실제 JSON-RPC에 맞춰 작성되었습니다.
+docker compose up -d --build manager indexer
 
-## v0.3.0 Explorer
+## v0.3.1 Explorer
 
 - 블록, 트랜잭션 해시, 주소 검색
 - 최근 블록·거래와 주소별 송수신 이력
@@ -27,7 +28,7 @@ docker compose up -d --build
 docker compose logs -f indexer
 ```
 
-상세 변경과 체인 코어 추가 요구사항은 `docs/IEUM_Manager_v0.3.0_Explorer_변경내역.md`를 참고하세요.
+상세 변경과 체인 코어 추가 요구사항은 `docs/IEUM_Manager_v0.3.1_Explorer_변경내역.md`를 참고하세요.
 
 ## 1차 제공 범위
 
@@ -81,14 +82,14 @@ sudo journalctl -u ieum-manager -n 100 --no-pager
 curl -s http://127.0.0.1:8787/api/snapshot
 ```
 
-## v0.22.1 호환 관리 RPC
+## v0.22.2 호환 관리 RPC
 
 - `ieum_supplyStatus`
 - `ieum_addressBalances`
 - `ieum_validatorStatus`
 - `ieum_blockProductionStatus`
 
-구형 노드가 섞여 있으면 기본 노드 관제는 유지되고 새 체인 지표 영역에 호환성 오류가 표시됩니다. 네 노드를 모두 v0.22.1로 올린 뒤 사용하세요.
+구형 노드가 섞여 있으면 기본 노드 관제는 유지되고 피어 자동 발견이 제한됩니다. 네 노드를 모두 v0.22.2로 올린 뒤 사용하세요.
 
 ## 다음 단계
 

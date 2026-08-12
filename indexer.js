@@ -57,11 +57,11 @@ async function cycle() {
         version=EXCLUDED.version,height=EXCLUDED.height,peer_count=EXCLUDED.peer_count,online=true,raw=EXCLUDED.raw,last_seen_at=now()`,
         [node.id,node.name,node.rpcUrl,status.version,status.height,status.peers,status]);
       try {
-        const peers=(await rpc(node.rpcUrl,'ieum_peerInfo')).result;
-        for (const peer of peers||[]) await query(`INSERT INTO discovered_nodes(node_id,name,p2p_address,version,height,peer_count,online,source_node_id,raw,last_seen_at)
+        const peerInfo=(await rpc(node.rpcUrl,'ieum_peerInfo')).result;
+        for (const peer of peerInfo.peers||[]) await query(`INSERT INTO discovered_nodes(node_id,name,p2p_address,version,height,peer_count,online,source_node_id,raw,last_seen_at)
           VALUES($1,$2,$3,$4,$5,$6,true,$7,$8,now()) ON CONFLICT(node_id) DO UPDATE SET p2p_address=EXCLUDED.p2p_address,version=EXCLUDED.version,
           height=EXCLUDED.height,peer_count=EXCLUDED.peer_count,online=true,source_node_id=EXCLUDED.source_node_id,raw=EXCLUDED.raw,last_seen_at=now()`,
-          [peer.nodeId,peer.name||peer.nodeId,peer.address,peer.version,peer.height,peer.peerCount,node.id,peer]);
+          [peer.peerId,peer.peerId,peer.address,null,peerInfo.height,peer.connections,node.id,peer]);
       } catch {}
     } catch { await query('UPDATE discovered_nodes SET online=false WHERE node_id=$1',[node.id]); }
   }
