@@ -2,6 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {pool,query} from './lib/db.js';
 import {rpc,hexToBigInt,toNumber} from './lib/rpc.js';
+import {selectIndexingQuorum} from './lib/quorum.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const config = JSON.parse(await readFile(process.env.IEUM_MANAGER_CONFIG || join(root,'config.json'),'utf8'));
@@ -9,9 +10,20 @@ const interval = Number(process.env.INDEX_INTERVAL_MS || 3000);
 const confirmations = Number(process.env.INDEX_CONFIRMATIONS || 0);
 let stopping = false;
 
-async function primaryRpc() {
-  for (const node of config.nodes) { try { await rpc(node.rpcUrl,'eth_blockNumber'); return node.rpcUrl; } catch {} }
-  throw new Error('사용 가능한 IEUM RPC 노드가 없습니다.');
+async function indexingQuorum() {
+  const observations=await Promise.all(config.nodes.map(async node=>{
+    try {
+      const [identity,finalized]=await Promise.all([rpc(node.rpcUrl,'ieum_networkIdentity'),rpc(node.rpcUrl,'ieum_finalizedBlock')]);
+      const height=Number(finalized.result.height);
+      const block=(await rpc(node.rpcUrl,'eth_getBlockByNumber',[`0x${height.toString(16)}`,false],10000)).result;
+      if (!block?.hash) throw new Error('finalized block not found');
+      return {node,online:true,identity:identity.result,finalized:{height,hash:block.hash}};
+    } catch (error) { return {node,online:false,error:error.message}; }
+  }));
+  const expectedChainId=Number(config.expectedChainId ?? 21004);
+  const expectedGenesis=String(config.expectedGenesisHash || '0x9cfb8866763ced88e3b66778013314017783d4cbc6e6cd735cf4fa118abcd944').toLowerCase();
+  const eligible=observations.filter(item=>!item.online || (item.identity.chainId===expectedChainId && (!expectedGenesis || item.identity.genesisHash?.toLowerCase()===expectedGenesis)));
+  return selectIndexingQuorum(eligible,Math.max(2,Number(config.indexQuorumPeers)||2));
 }
 
 async function indexBlock(url, height) {
@@ -20,6 +32,12 @@ async function indexBlock(url, height) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const existing=await client.query('SELECT hash FROM blocks WHERE height=$1',[height]);
+    if (existing.rows[0] && existing.rows[0].hash !== block.hash) throw new Error(`확정성 위반 감지: 높이 ${height}의 기존 해시와 RPC 해시가 다릅니다.`);
+    if (height>0) {
+      const parent=await client.query('SELECT hash FROM blocks WHERE height=$1',[height-1]);
+      if (parent.rows[0] && parent.rows[0].hash !== block.parentHash) throw new Error(`부모 블록 불일치: 높이 ${height}`);
+    }
     await client.query(`INSERT INTO blocks(height,hash,parent_hash,producer,timestamp,tx_count,size_bytes,raw)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(height) DO UPDATE SET hash=EXCLUDED.hash,parent_hash=EXCLUDED.parent_hash,
       producer=EXCLUDED.producer,timestamp=EXCLUDED.timestamp,tx_count=EXCLUDED.tx_count,size_bytes=EXCLUDED.size_bytes,raw=EXCLUDED.raw,indexed_at=now()`,
@@ -71,7 +89,7 @@ async function ensureChainIdentity(url, tip) {
 }
 
 async function cycle() {
-  const url=await primaryRpc(); const tip=toNumber((await rpc(url,'eth_blockNumber')).result)-confirmations;
+  const quorum=await indexingQuorum(); const url=quorum[0].node.rpcUrl; const tip=quorum[0].finalized.height-confirmations;
   await ensureChainIdentity(url,tip);
   for (const node of config.nodes) {
     try {

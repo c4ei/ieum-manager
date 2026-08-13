@@ -167,6 +167,11 @@ function buildAlerts(nodes, chain) {
     if (identities.size>1) alerts.push({level:'critical',message:'노드 간 chainId 또는 genesisHash 불일치'});
     online.filter(n=>n.status.syncing).forEach(n=>alerts.push({level:'warning',message:`${n.name} 동기화 진행 중`}));
     online.filter(n=>n.status.peers<1).forEach(n=>alerts.push({level:'warning',message:`${n.name} 연결 피어 없음`}));
+    online.forEach(n=>{
+      const storage=n.storage||{};
+      if (storage.latest_checkpoint_height != null && storage.latest_certified_snapshot_height !== storage.latest_checkpoint_height) alerts.push({level:'critical',message:`${n.name} 최신 체크포인트 ${storage.latest_checkpoint_height}가 아직 2/3 인증되지 않음`});
+      if (storage.certified_snapshot_count === 0 && storage.latest_checkpoint_height != null) alerts.push({level:'critical',message:`${n.name} 인증 snapshot 없음`});
+    });
   }
   if (chain?.available) {
     (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>0 && v.signingRatePercent<95)
@@ -185,7 +190,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.4',chainVersion:'0.22.4',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.5',chainVersion:'0.22.5',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -212,4 +217,3 @@ export const server=http.createServer(async(req,res)=>{
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   server.listen(port,host,()=>console.log(`IEUM Manager listening on http://${host}:${port}`));
 }
-
