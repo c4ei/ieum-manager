@@ -2,7 +2,7 @@
 
 <img width="1372" height="965" alt="image" src="https://github.com/user-attachments/assets/1b615557-0b61-44dd-abc5-5774311581ce" />
 
-# IEUM Manager 0.3.5
+# IEUM Manager 0.3.6
 
 IEUM Chain 운영 관제와 PostgreSQL 기반 블록 익스플로러를 제공하는 읽기 전용 웹입니다. `/start.html`에서 초보자용 Wallet 다운로드, AAH로 IEUM 구매, Chain 노드 실행 안내를 제공합니다.
 
@@ -99,3 +99,7 @@ v0.3.5부터 인덱서는 Chain ID, genesis hash, 확정 높이와 블록 해시
 RPC 2개 이상의 quorum이 없으면 인덱싱을 중단합니다. 인증 snapshot 누락은 운영
 화면에 critical 경보로 표시합니다. 자세한 내용은
 [`docs/IEUM_Manager_v0.3.5_Quorum_Snapshot_변경내역.md`](docs/IEUM_Manager_v0.3.5_Quorum_Snapshot_변경내역.md)를 참고하세요.
+
+v0.3.6에서는 운영 Chain v0.22.5의 실제 genesis hash를 반영하고 GitHub Actions
+CI를 추가했습니다. 적용 전에는
+[`docs/IEUM_Manager_v0.3.6_운영_정합성_변경내역.md`](docs/IEUM_Manager_v0.3.6_운영_정합성_변경내역.md)를 확인하세요.

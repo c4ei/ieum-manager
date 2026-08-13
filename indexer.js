@@ -21,7 +21,7 @@ async function indexingQuorum() {
     } catch (error) { return {node,online:false,error:error.message}; }
   }));
   const expectedChainId=Number(config.expectedChainId ?? 21004);
-  const expectedGenesis=String(config.expectedGenesisHash || '0x9cfb8866763ced88e3b66778013314017783d4cbc6e6cd735cf4fa118abcd944').toLowerCase();
+  const expectedGenesis=String(config.expectedGenesisHash || '0x497e04ac4faec01b78b57d3caef7951fca98b1928a1af558ea03a663aa622418').toLowerCase();
   const eligible=observations.filter(item=>!item.online || (item.identity.chainId===expectedChainId && (!expectedGenesis || item.identity.genesisHash?.toLowerCase()===expectedGenesis)));
   return selectIndexingQuorum(eligible,Math.max(2,Number(config.indexQuorumPeers)||2));
 }

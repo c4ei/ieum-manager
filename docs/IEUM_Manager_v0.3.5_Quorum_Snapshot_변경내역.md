@@ -1,5 +1,9 @@
 # IEUM Manager v0.3.5 Quorum·Snapshot 운영 보강
 
+> 운영 정정: 아래 v0.3.5 예시의 genesis hash는 현재 Chain v0.22.5와 일치하지
+> 않습니다. 운영에는 v0.3.6과 `0x497e04ac4faec01b78b57d3caef7951fca98b1928a1af558ea03a663aa622418`을
+> 사용하세요.
+
 ## 변경 사항
 
 - 더 이상 응답이 빠른 첫 RPC를 무조건 신뢰하지 않습니다.

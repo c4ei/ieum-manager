@@ -1,9 +1,14 @@
-import test from 'node:test';import assert from 'node:assert/strict';
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
 process.env.IEUM_MANAGER_CONFIG=new URL('../config.example.json',import.meta.url).pathname;
 process.env.IEUM_MANAGER_PORT='0';
 const {hexToBigInt,formatUnits}=await import('../server.js');
 test('hex quantity parser',()=>assert.equal(hexToBigInt('0x2a'),42n));
 test('unit formatter',()=>assert.equal(formatUnits(1234500000000000000n,18),'1.2345'));
+test('example config pins the Chain v0.22.5 genesis hash',async()=>{
+  const config=JSON.parse(await readFile(new URL('../config.example.json',import.meta.url),'utf8'));
+  assert.equal(config.expectedChainId,21004);
+  assert.equal(config.expectedGenesisHash,'0x497e04ac4faec01b78b57d3caef7951fca98b1928a1af558ea03a663aa622418');
+});
 const {selectIndexingQuorum}=await import('../lib/quorum.js');
 test('indexer requires two identical finalized tips',()=>{
   const base={online:true,identity:{chainId:21004,genesisHash:'0xgenesis'},finalized:{height:9,hash:'0xblock'}};
