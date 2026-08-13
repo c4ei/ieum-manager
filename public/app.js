@@ -12,7 +12,8 @@ function render(data){const s=data.summary,c=data.chain||{};$('#updated').textCo
  $('#tx-body').innerHTML=data.transactions.length?data.transactions.map(t=>`<tr><td>${num(t.blockNumber)}</td><td title="${esc(t.from)}">${short(t.from)}</td><td title="${esc(t.to)}">${short(t.to)}</td><td class="amount">${esc(t.value)} ${esc(data.symbol)}</td><td title="${esc(t.hash)}">${short(t.hash)}</td></tr>`).join(''):`<tr><td colspan="5" class="empty">최근 거래가 없습니다.</td></tr>`}
 async function refresh(){try{const r=await fetch('/api/snapshot');if(!r.ok)throw new Error(`HTTP ${r.status}`);render(await r.json())}catch(e){$('#alerts').innerHTML=`<div class="alerts"><p class="critical"><b>CONNECTION</b>${esc(e.message)}</p></div>`}}refresh();setInterval(refresh,10000);
 
-const units=v=>{try{return `${(BigInt(v)/10n**18n).toLocaleString('ko-KR')} IEUM`}catch{return '—'}};
+export const formatUnits8=(v,decimals=18,maxFractionDigits=8)=>{const n=BigInt(v);const negative=n<0n,absolute=negative?-n:n;const shown=Math.min(decimals,maxFractionDigits),discarded=decimals-shown,roundingUnit=10n**BigInt(discarded);const rounded=discarded>0?(absolute+roundingUnit/2n)/roundingUnit:absolute,scale=10n**BigInt(shown),whole=rounded/scale,fraction=shown>0?(rounded%scale).toString().padStart(shown,'0').replace(/0+$/,''):'';return `${negative?'-':''}${whole.toLocaleString('ko-KR')}${fraction?`.${fraction}`:''}`};
+const units=v=>{try{return `${formatUnits8(v)} IEUM`}catch{return '—'}};
 const when=v=>v?new Date(Number(v)*1000).toLocaleString('ko-KR'):'—';
 async function api(path){const r=await fetch(path);const body=await r.json();if(!r.ok)throw new Error(body.error||`HTTP ${r.status}`);return body;}
 const params=new URLSearchParams(location.search);let blockPage=Math.max(Number(params.get('blocks'))||1,1);let txPage=Math.max(Number(params.get('txs'))||1,1);

@@ -4,6 +4,13 @@ process.env.IEUM_MANAGER_PORT='0';
 const {hexToBigInt,formatUnits}=await import('../server.js');
 test('hex quantity parser',()=>assert.equal(hexToBigInt('0x2a'),42n));
 test('unit formatter',()=>assert.equal(formatUnits(1234500000000000000n,18),'1.2345'));
+test('unit formatter rounds at 8 decimals without losing integer precision',()=>{
+  assert.equal(formatUnits(99999900000000000000n,18),'99.9999');
+  assert.equal(formatUnits(99231000000000000000n,18),'99.231');
+  assert.equal(formatUnits(99999999996000000000n,18),'100');
+  assert.equal(formatUnits(4000000000n,18),'0');
+  assert.equal(formatUnits(5000000000n,18),'0.00000001');
+});
 test('example config pins the Chain v0.22.5 genesis hash',async()=>{
   const config=JSON.parse(await readFile(new URL('../config.example.json',import.meta.url),'utf8'));
   assert.equal(config.expectedChainId,21004);

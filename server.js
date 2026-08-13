@@ -63,12 +63,17 @@ export function hexToBigInt(value) {
   return BigInt(value);
 }
 
-export function formatUnits(value, decimals = 18) {
+export function formatUnits(value, decimals = 18, maxFractionDigits = 8) {
   const n = typeof value === 'bigint' ? value : BigInt(value);
-  const base = 10n ** BigInt(decimals);
-  const whole = n / base;
-  const fraction = (n % base).toString().padStart(decimals, '0').replace(/0+$/, '').slice(0, 6);
-  return fraction ? `${whole}.${fraction}` : whole.toString();
+  if (!Number.isInteger(decimals) || decimals < 0) throw new Error('decimals must be a non-negative integer');
+  if (!Number.isInteger(maxFractionDigits) || maxFractionDigits < 0) throw new Error('maxFractionDigits must be a non-negative integer');
+  const negative=n<0n;const absolute=negative?-n:n;
+  const shownDecimals=Math.min(decimals,maxFractionDigits);const discardedDecimals=decimals-shownDecimals;
+  const roundingUnit=10n**BigInt(discardedDecimals);
+  const rounded=discardedDecimals>0?(absolute+roundingUnit/2n)/roundingUnit:absolute;
+  const displayScale=10n**BigInt(shownDecimals);const whole=rounded/displayScale;
+  const fraction=shownDecimals>0?(rounded%displayScale).toString().padStart(shownDecimals,'0').replace(/0+$/,''):'';
+  return `${negative?'-':''}${whole}${fraction?`.${fraction}`:''}`;
 }
 
 async function rpc(url, method, params = []) {
@@ -190,7 +195,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.6',chainVersion:'0.22.5',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.7',chainVersion:'0.22.5',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
