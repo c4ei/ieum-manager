@@ -1,14 +1,37 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IEUM Manager</title><meta name="description" content="IEUM Chain 블록 탐색기와 AAH 생태계를 연결하는 공식 운영 현황 페이지"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/ieum-promo.css"></head><body>
-<aside><div class="brand"><i>∞</i><div><b>IEUM</b><span>EXPLORER</span></div></div><nav><a class="active" href="#overview">Overview</a><a href="#explorer">Explorer</a><a href="#top100">Top 100</a><a href="#assets">Tokens · NFT</a><a href="#nodes">Nodes</a><a href="#validators">Validators</a></nav><div class="secure"><span></span> READ-ONLY EXPLORER<small>IEUM Chain v0.22.4+</small></div></aside>
-<main><header><div><p class="eyebrow">NETWORK CONTROL CENTER</p><h1>이음 체인 <span>운영 관제</span></h1><p class="lead">4개의 메인 노드와 공급량, 검증자, 전체 계정 흐름을 실시간으로 관측합니다.</p></div><div class="live"><span></span><div><b>LIVE NETWORK</b><time id="updated">연결 중</time></div></div></header>
-<section class="ecosystem" aria-labelledby="ecosystem-title"><div><p class="eyebrow">FROM CHAIN TO EVERYDAY EXPERIENCE</p><h2 id="ecosystem-title">IEUM이 움직이는 곳, AAH 생태계</h2><p>블록에서 확인한 IEUM의 흐름을 실제 서비스 경험으로 이어보세요. AAH에서 생태계를 만나고 CEX에서 시장을 확인할 수 있습니다.</p></div><div class="ecosystem-actions"><a class="eco-primary" href="https://aah.name" target="_blank" rel="noopener noreferrer">AAH 서비스 시작하기 <span>↗</span></a><a href="https://cex.aah.name" target="_blank" rel="noopener noreferrer">AAH CEX 둘러보기 <span>↗</span></a></div><small>외부 사이트로 이동합니다. 거래 전 주소와 조건을 직접 확인하세요.</small></section>
-<section id="overview"><div id="summary" class="cards"></div><div id="alerts"></div><div id="chain-kpis" class="kpi-grid"></div></section>
-<section id="explorer"><div class="section-title"><div><p class="eyebrow">BLOCK EXPLORER</p><h2>블록 · 트랜잭션 검색</h2></div><small id="indexer-status">인덱서 연결 중</small></div><form id="search-form" class="explorer-search"><input id="search-input" aria-label="검색" placeholder="블록 높이, 블록/트랜잭션 해시 또는 주소"><button>검색</button></form><div id="search-result"></div><div class="explorer-columns"><div><h3>최근 블록</h3><div class="panel table-wrap"><table><thead><tr><th>높이</th><th>생성자</th><th>거래</th><th>시각</th></tr></thead><tbody id="block-body"></tbody></table><div id="block-pages" class="pagination"></div></div></div><div><h3>최근 트랜잭션</h3><div class="panel table-wrap"><table><thead><tr><th>해시</th><th>From → To</th><th>수량</th></tr></thead><tbody id="explorer-tx-body"></tbody></table><div id="tx-pages" class="pagination"></div></div></div></div></section>
-<section id="top100"><div class="section-title"><div><p class="eyebrow">WEALTH DISTRIBUTION</p><h2>Top 100 보유 주소</h2></div><small>확정 상태 잔액 기준</small></div><div class="panel table-wrap"><table><thead><tr><th>#</th><th>주소</th><th>잔액</th><th>거래 수</th><th>상태</th></tr></thead><tbody id="top-body"></tbody></table></div></section>
-<section id="assets"><div class="section-title"><div><p class="eyebrow">DIGITAL ASSETS</p><h2>토큰 · NFT</h2></div><small>IEUM 표준 준비 영역</small></div><div class="asset-grid"><article class="panel"><h3>IEUM-20 토큰</h3><p id="token-status">체인 표준 연동 상태를 확인 중입니다.</p><div id="token-list"></div></article><article class="panel"><h3>IEUM-721 / 1155 NFT</h3><p id="nft-status">체인 표준 연동 상태를 확인 중입니다.</p><div id="nft-list"></div></article></div></section>
-<section id="nodes"><div class="section-title"><div><p class="eyebrow">VALIDATOR FLEET</p><h2>메인 노드 상태</h2></div><small>RPC · 합의 · 저장소 상태</small></div><div id="node-grid" class="node-grid"></div></section>
-<section id="validators"><div class="section-title"><div><p class="eyebrow">CONSENSUS HEALTH</p><h2>검증자 서명률</h2></div><small id="validator-window">최근 확정 블록</small></div><div id="validator-grid" class="validator-grid"></div></section>
-<section id="wallets"><div class="section-title"><div><p class="eyebrow">TREASURY WATCH</p><h2>관리 지갑</h2></div><small>설정에 등록한 운영 주소</small></div><div class="panel table-wrap"><table><thead><tr><th>이름</th><th>주소</th><th>잔액</th><th>Nonce</th><th>상태</th></tr></thead><tbody id="wallet-body"></tbody></table></div></section>
-<section id="accounts"><div class="section-title"><div><p class="eyebrow">STATE INDEX</p><h2>전체 계정 잔액</h2></div><small id="account-count">v0.22.1 잔액 인덱스</small></div><div class="panel table-wrap"><table><thead><tr><th>#</th><th>주소</th><th>잔액</th><th>구분</th></tr></thead><tbody id="account-body"></tbody></table></div></section>
-<section id="flow"><div class="section-title"><div><p class="eyebrow">LEDGER FLOW</p><h2>최근 온체인 흐름</h2></div><small>확정 블록 거래</small></div><div class="panel table-wrap"><table><thead><tr><th>블록</th><th>보낸 주소</th><th>받는 주소</th><th>수량</th><th>거래 해시</th></tr></thead><tbody id="tx-body"></tbody></table></div></section>
-<footer><b>IEUM Manager v0.3.4</b><span>Operations + Explorer · PostgreSQL index · No signing keys · No write RPC</span></footer></main><script type="module" src="/app.js"></script></body></html>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>IEUM Manager</title><meta name="description" content="IEUM Chain 블록 탐색기와 AAH 생태계를 연결하는 공식 운영 현황 페이지">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/ieum-promo.css">
+</head>
+<body>
+<aside>
+    <div class="brand"><i>∞</i><div><b>IEUM</b><span>EXPLORER</span></div></div>
+    <nav>
+        <a href="/start.html">시작하기</a>
+        <a class="active" href="#overview">Overview</a>
+        <a href="#explorer">Explorer</a>
+        <a href="#top100">Top 100</a>
+        <a href="#assets">Tokens · NFT</a>
+        <a href="#nodes">Nodes</a>
+        <a href="#validators">Validators</a>
+    </nav>
+    <div class="secure"><span></span> READ-ONLY EXPLORER<small>IEUM Chain v0.22.4+</small></div>
+</aside>
+<main>
+    <header><div><p class="eyebrow">NETWORK CONTROL CENTER</p><h1>이음 체인 <span>운영 관제</span></h1><p class="lead">4개의 메인 노드와 공급량, 검증자, 전체 계정 흐름을 실시간으로 관측합니다.</p></div><div class="live"><span></span><div><b>LIVE NETWORK</b><time id="updated">연결 중</time></div></div></header>
+    <section class="ecosystem" aria-labelledby="ecosystem-title"><div><p class="eyebrow">FROM CHAIN TO EVERYDAY EXPERIENCE</p><h2 id="ecosystem-title">IEUM이 움직이는 곳, AAH 생태계</h2><p>블록에서 확인한 IEUM의 흐름을 실제 서비스 경험으로 이어보세요. AAH에서 생태계를 만나고 CEX에서 시장을 확인할 수 있습니다.</p></div><div class="ecosystem-actions"><a class="eco-primary" href="https://aah.name" target="_blank" rel="noopener noreferrer">AAH 서비스 시작하기 <span>↗</span></a><a href="https://cex.aah.name" target="_blank" rel="noopener noreferrer">AAH CEX 둘러보기 <span>↗</span></a></div><small>외부 사이트로 이동합니다. 거래 전 주소와 조건을 직접 확인하세요.</small></section>
+    <section id="overview"><div id="summary" class="cards"></div><div id="alerts"></div><div id="chain-kpis" class="kpi-grid"></div></section>
+    <section id="explorer"><div class="section-title"><div><p class="eyebrow">BLOCK EXPLORER</p><h2>블록 · 트랜잭션 검색</h2></div><small id="indexer-status">인덱서 연결 중</small></div><form id="search-form" class="explorer-search"><input id="search-input" aria-label="검색" placeholder="블록 높이, 블록/트랜잭션 해시 또는 주소"><button>검색</button></form><div id="search-result"></div><div class="explorer-columns"><div><h3>최근 블록</h3><div class="panel table-wrap"><table><thead><tr><th>높이</th><th>생성자</th><th>거래</th><th>시각</th></tr></thead><tbody id="block-body"></tbody></table><div id="block-pages" class="pagination"></div></div></div><div><h3>최근 트랜잭션</h3><div class="panel table-wrap"><table><thead><tr><th>해시</th><th>From → To</th><th>수량</th></tr></thead><tbody id="explorer-tx-body"></tbody></table><div id="tx-pages" class="pagination"></div></div></div></div></section>
+    <section id="top100"><div class="section-title"><div><p class="eyebrow">WEALTH DISTRIBUTION</p><h2>Top 100 보유 주소</h2></div><small>확정 상태 잔액 기준</small></div><div class="panel table-wrap"><table><thead><tr><th>#</th><th>주소</th><th>잔액</th><th>거래 수</th><th>상태</th></tr></thead><tbody id="top-body"></tbody></table></div></section>
+    <section id="assets"><div class="section-title"><div><p class="eyebrow">DIGITAL ASSETS</p><h2>토큰 · NFT</h2></div><small>IEUM 표준 준비 영역</small></div><div class="asset-grid"><article class="panel"><h3>IEUM-20 토큰</h3><p id="token-status">체인 표준 연동 상태를 확인 중입니다.</p><div id="token-list"></div></article><article class="panel"><h3>IEUM-721 / 1155 NFT</h3><p id="nft-status">체인 표준 연동 상태를 확인 중입니다.</p><div id="nft-list"></div></article></div></section>
+    <section id="nodes"><div class="section-title"><div><p class="eyebrow">VALIDATOR FLEET</p><h2>메인 노드 상태</h2></div><small>RPC · 합의 · 저장소 상태</small></div><div id="node-grid" class="node-grid"></div></section>
+    <section id="validators"><div class="section-title"><div><p class="eyebrow">CONSENSUS HEALTH</p><h2>검증자 서명률</h2></div><small id="validator-window">최근 확정 블록</small></div><div id="validator-grid" class="validator-grid"></div></section>
+    <section id="wallets"><div class="section-title"><div><p class="eyebrow">TREASURY WATCH</p><h2>관리 지갑</h2></div><small>설정에 등록한 운영 주소</small></div><div class="panel table-wrap"><table><thead><tr><th>이름</th><th>주소</th><th>잔액</th><th>Nonce</th><th>상태</th></tr></thead><tbody id="wallet-body"></tbody></table></div></section>
+    <section id="accounts"><div class="section-title"><div><p class="eyebrow">STATE INDEX</p><h2>전체 계정 잔액</h2></div><small id="account-count">v0.22.1 잔액 인덱스</small></div><div class="panel table-wrap"><table><thead><tr><th>#</th><th>주소</th><th>잔액</th><th>구분</th></tr></thead><tbody id="account-body"></tbody></table></div></section>
+    <section id="flow"><div class="section-title"><div><p class="eyebrow">LEDGER FLOW</p><h2>최근 온체인 흐름</h2></div><small>확정 블록 거래</small></div><div class="panel table-wrap"><table><thead><tr><th>블록</th><th>보낸 주소</th><th>받는 주소</th><th>수량</th><th>거래 해시</th></tr></thead><tbody id="tx-body"></tbody></table></div></section>
+    <footer><b>IEUM Manager v0.3.4</b><span>Operations + Explorer · PostgreSQL index · No signing keys · No write RPC</span></footer>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
+

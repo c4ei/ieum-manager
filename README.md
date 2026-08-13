@@ -94,3 +94,4 @@ curl -s http://127.0.0.1:8787/api/snapshot
 ## 다음 단계
 
 Prometheus/Grafana 장기 추세와 Alertmanager 알림을 함께 운영하고, 관리 웹에는 WebAuthn MFA와 역할 권한을 추가하는 것이 다음 단계입니다. 노드 재시작·업데이트·송금 같은 쓰기 기능은 별도 권한과 재인증, 이중 승인 절차가 마련된 후 분리해 추가해야 합니다.
+

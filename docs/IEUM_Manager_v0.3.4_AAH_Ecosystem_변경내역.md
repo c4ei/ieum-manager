@@ -36,3 +36,4 @@
     cd /opt/ieum-manager
     npm test
     sudo systemctl restart ieum-manager
+
