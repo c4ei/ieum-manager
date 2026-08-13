@@ -2,9 +2,9 @@
 
 <img width="1372" height="965" alt="image" src="https://github.com/user-attachments/assets/1b615557-0b61-44dd-abc5-5774311581ce" />
 
-# IEUM Manager 0.3.1
+# IEUM Manager 0.3.4
 
-IEUM Chain 운영 관제와 PostgreSQL 기반 블록 익스플로러를 제공하는 읽기 전용 웹입니다. `ieum-chain v0.22.2`의 실제 JSON-RPC에 맞춰 작성되었습니다.
+IEUM Chain 운영 관제와 PostgreSQL 기반 블록 익스플로러를 제공하는 읽기 전용 웹입니다. `/start.html`에서 초보자용 Wallet 다운로드, AAH로 IEUM 구매, Chain 노드 실행 안내를 제공합니다.
 
 docker compose up -d --build manager indexer
 

@@ -185,7 +185,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.3',chainVersion:'0.22.4',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.4',chainVersion:'0.22.4',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -193,7 +193,7 @@ async function snapshot() {
   return cache.pending;
 }
 
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 export const server=http.createServer(async(req,res)=>{
   res.setHeader('x-content-type-options','nosniff'); res.setHeader('referrer-policy','no-referrer');
   res.setHeader('content-security-policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:");
