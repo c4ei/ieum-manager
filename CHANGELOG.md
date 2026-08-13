@@ -1,5 +1,11 @@
 # IEUM Manager 변경 내역
 
+## 0.3.8 - 2026-08-13
+
+- GitHub Actions의 Docker Compose 검증에 CI 전용 `POSTGRES_PASSWORD`를 제공
+- 저장소에 포함하지 않는 운영 `.env` 없이도 `docker compose config` 검증이 통과하도록 수정
+- 실제 운영 비밀번호와 GitHub Secrets를 사용하지 않는 안전한 구성 검증 방식 적용
+
 ## 0.3.3 - 2026-08-12
 
 - 표시 호환 버전을 IEUM Chain v0.22.4로 갱신

@@ -25,4 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: docker compose config
+      - name: Validate Docker Compose
+        env:
+          POSTGRES_PASSWORD: ci-only-placeholder
+        run: docker compose config
