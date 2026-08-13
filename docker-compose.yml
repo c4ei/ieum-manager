@@ -22,6 +22,7 @@ services:
     environment:
       IEUM_MANAGER_HOST: 0.0.0.0
       IEUM_MANAGER_ADMIN_TOKEN: ${IEUM_MANAGER_ADMIN_TOKEN:?IEUM_MANAGER_ADMIN_TOKEN을 .env에 설정하세요}
+      JWT_SECRET: ${JWT_SECRET:?AAH와 동일한 JWT_SECRET을 .env에 설정하세요}
       IEUM_MANAGER_TRUST_PROXY: ${IEUM_MANAGER_TRUST_PROXY:-0}
       DATABASE_URL: postgresql://${POSTGRES_USER:-ieum}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ieum_exp}
     volumes:

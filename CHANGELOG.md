@@ -1,5 +1,13 @@
 # IEUM Manager 변경 내역
 
+## 0.3.11 - 2026-08-13
+
+- AAH `.aah.name` 공유 `token` JWT와 동일한 `JWT_SECRET`으로 관리자 SSO 연동
+- 비상용 Manager 토큰 로그인은 보조 인증으로 유지
+- 관리자 Dashboard, RPC, WAF, 차단 IP, 감사 로그 URL 분리
+- 공개 Nodes, Validators, Accounts 상세 화면과 25개 단위 페이지네이션
+- LIVE NETWORK 표시 시계는 1초, 네트워크 데이터는 5초 간격 갱신
+
 ## 0.3.10 - 2026-08-13
 
 - AAH 관리자 WAF를 참고한 monitor/block, 점수, TTL, IP allow/block 및 자동 격리 UI

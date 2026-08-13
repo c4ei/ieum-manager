@@ -29,9 +29,11 @@ jobs:
         env:
           POSTGRES_PASSWORD: ci-only-placeholder
           IEUM_MANAGER_ADMIN_TOKEN: ci-only-placeholder-32-characters-minimum
+          JWT_SECRET: ci-only-jwt-secret-not-for-production
         run: docker compose config
       - name: Build application images without starting PostgreSQL
         env:
           POSTGRES_PASSWORD: ci-only-placeholder
           IEUM_MANAGER_ADMIN_TOKEN: ci-only-placeholder-32-characters-minimum
+          JWT_SECRET: ci-only-jwt-secret-not-for-production
         run: docker compose build manager indexer
