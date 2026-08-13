@@ -1,8 +1,10 @@
 import http from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {query,dbReady} from './lib/db.js';
+import {applyPolicy,audit,loadPolicy,savePolicy} from './lib/admin-policy.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
@@ -12,6 +14,9 @@ const config = JSON.parse(await readFile(configPath, 'utf8'));
 const timeoutMs = Number(process.env.IEUM_RPC_TIMEOUT_MS || 4000);
 let rpcId = 0;
 let cache = { at: 0, data: null, pending: null };
+const adminToken=process.env.IEUM_MANAGER_ADMIN_TOKEN||'';
+const attempts=new Map();
+const requestBuckets=new Map();
 
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));};
 const limitOf=(url,fallback=25,max=100)=>Math.min(Math.max(Number(url.searchParams.get('limit'))||fallback,1),max);
@@ -20,6 +25,27 @@ const pageOf=url=>Math.max(Number(url.searchParams.get('page'))||1,1);
 const paging=(url,total,fallback=25,max=100)=>{const limit=limitOf(url,fallback,max);const page=pageOf(url);const offset=(page-1)*limit;const pages=Math.max(Math.ceil(Number(total)/limit),1);return {limit,page,offset,total:Number(total),pages,previous:page>1?page-1:null,next:page<pages?page+1:null};};
 const validHash=value=>/^0x[0-9a-f]{64}$/i.test(value||'');
 const validAddress=value=>/^0x[0-9a-f]{40}$/i.test(value||'');
+const requestIp=req=>String(process.env.IEUM_MANAGER_TRUST_PROXY==='1'?(req.headers['cf-connecting-ip']||req.headers['x-real-ip']||req.socket.remoteAddress):(req.socket.remoteAddress||'unknown')).split(',')[0].trim();
+function rateAllowed(req,limit){const key=`${requestIp(req)}:${req.url.startsWith('/api/admin/')?'admin':'public'}`,now=Date.now(),entry=requestBuckets.get(key)||{started:now,count:0};if(now-entry.started>=60_000){entry.started=now;entry.count=0;}entry.count++;requestBuckets.set(key,entry);return entry.count<=limit;}
+const secureEqual=(left,right)=>{const a=Buffer.from(left),b=Buffer.from(right);return a.length===b.length&&timingSafeEqual(a,b);};
+function adminAuthorized(req){const ip=requestIp(req),now=Date.now(),entry=attempts.get(ip)||{count:0,blockedUntil:0};if(entry.blockedUntil>now)return false;const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');const ok=adminToken.length>=32&&secureEqual(supplied,adminToken);if(ok){attempts.delete(ip);return true;}entry.count++;if(entry.count>=5){entry.blockedUntil=now+15*60_000;entry.count=0;}attempts.set(ip,entry);return false;}
+async function readJson(req,max=16_384){let size=0,body='';for await(const chunk of req){size+=chunk.length;if(size>max)throw new Error('요청 본문이 너무 큽니다.');body+=chunk;}return body?JSON.parse(body):{};}
+function sameOrigin(req){const origin=req.headers.origin;if(!origin)return true;return origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`;}
+
+async function adminApi(req,res,url){
+  const ip=requestIp(req);if(!adminAuthorized(req)){await audit({action:'auth-failed',ip});return json(res,401,{error:'관리자 인증이 필요합니다.'});}
+  if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
+  if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),capabilities:{managerRpcPolicy:true,alertRefresh:true,p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
+  if(req.method==='PUT'&&url.pathname==='/api/admin/policy'){
+    if(!String(req.headers['content-type']||'').startsWith('application/json'))return json(res,415,{error:'application/json만 허용합니다.'});
+    const input=await readJson(req);const ids=new Set(config.nodes.map(n=>n.id));const nodes={};
+    for(const [id,rule] of Object.entries(input.nodes||{})){if(!ids.has(id))return json(res,400,{error:`알 수 없는 노드: ${id}`});nodes[id]={blocked:Boolean(rule.blocked),priority:Math.max(0,Math.min(100,Number(rule.priority)||0)),note:String(rule.note||'').slice(0,200)};}
+    if(config.nodes.every(node=>nodes[node.id]?.blocked))return json(res,400,{error:'모든 RPC 노드를 동시에 차단할 수 없습니다.'});
+    const policy=await savePolicy({nodes});cache={at:0,data:null,pending:null};await audit({action:'policy-updated',ip,nodes});return json(res,200,{ok:true,policy});
+  }
+  if(req.method==='POST'&&url.pathname==='/api/admin/refresh'){cache={at:0,data:null,pending:null};await audit({action:'snapshot-refresh',ip});return json(res,200,{ok:true});}
+  return json(res,404,{error:'관리 API를 찾을 수 없습니다.'});
+}
 
 async function explorerApi(req,res,url){
   if(!await dbReady()) return json(res,503,{error:'익스플로러 데이터베이스 연결 대기 중'});
@@ -130,7 +156,7 @@ async function inspectChain(primary) {
     const [supply, validators, production, balances] = await Promise.all([
       rpc(primary.rpcUrl, 'ieum_supplyStatus'),
       rpc(primary.rpcUrl, 'ieum_validatorStatus', [Number(config.validatorWindow) || 1000]),
-      rpc(primary.rpcUrl, 'ieum_blockProductionStatus', [Number(config.productionWindow) || 100]),
+      inspectProduction(primary),
       rpc(primary.rpcUrl, 'ieum_addressBalances', [0, Math.min(Number(config.accountLimit) || 100, 1000)])
     ]);
     const decimals = supply.result.decimals ?? config.unitDecimals ?? 18;
@@ -139,13 +165,29 @@ async function inspectChain(primary) {
       supply:{...supply.result,totalIssuedFormatted:formatUnits(supply.result.totalIssued,decimals),
         circulatingFormatted:formatUnits(supply.result.circulating,decimals),lockedFormatted:formatUnits(supply.result.locked,decimals)},
       validators:validators.result,
-      production:production.result,
+      validatorMinimumSamples:Math.max(1,Number(config.validatorMinimumSamples)||20),
+      production,
       accounts:{...balances.result,accounts:(balances.result.accounts || []).map(account=>({...account,
         balanceFormatted:formatUnits(account.balance,decimals)}))}
     };
   } catch (error) {
     return {available:false,error:error.message};
   }
+}
+
+const quantity=value=>typeof value==='string'&&value.startsWith('0x')?Number(BigInt(value)):Number(value);
+export async function inspectProduction(primary){
+  const tip=Number(primary?.status?.height);if(!Number.isFinite(tip)||tip<1)return {sampleBlocks:0,averageBlockTimeSeconds:null,estimatedMissedSlots:0,producerBlocks:{},genesisExcluded:true};
+  const count=Math.min(Math.max(Number(config.productionWindow)||100,2),tip);
+  const heights=Array.from({length:count},(_,index)=>tip-index).filter(height=>height>0);
+  const blocks=(await Promise.all(heights.map(async height=>{try{return (await rpc(primary.rpcUrl,'eth_getBlockByNumber',[`0x${height.toString(16)}`,false])).result;}catch{return null;}}))).filter(Boolean)
+    .map(block=>({height:quantity(block.number),timestamp:quantity(block.timestamp),producer:block.miner||block.producer||'unknown'})).sort((a,b)=>a.height-b.height);
+  return summarizeProduction(blocks);
+}
+export function summarizeProduction(blocks){
+  const intervals=blocks.slice(1).map((block,index)=>Math.max(0,block.timestamp-blocks[index].timestamp));const target=3;
+  const producerBlocks={};for(const block of blocks)producerBlocks[block.producer]=(producerBlocks[block.producer]||0)+1;
+  return {sampleBlocks:blocks.length,intervalSamples:intervals.length,averageBlockTimeSeconds:intervals.length?intervals.reduce((sum,value)=>sum+value,0)/intervals.length:null,estimatedMissedSlots:intervals.reduce((sum,value)=>sum+Math.max(0,Math.floor(value/target)-1),0),producerBlocks,genesisExcluded:true};
 }
 
 async function recentFlow(primary, tip) {
@@ -179,9 +221,12 @@ function buildAlerts(nodes, chain) {
     });
   }
   if (chain?.available) {
-    (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>0 && v.signingRatePercent<95)
+    const minimum=Math.max(1,Number(config.validatorMinimumSamples)||20);
+    (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>0 && v.eligibleBlocks<minimum)
+      .forEach(v=>alerts.push({level:'info',message:`검증자 ${v.id} 서명률 표본 부족 (${v.eligibleBlocks}/${minimum} 블록)`}));
+    (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>=minimum && v.signingRatePercent<95)
       .forEach(v=>alerts.push({level:v.signingRatePercent<80?'critical':'warning',message:`검증자 ${v.id} 서명률 ${v.signingRatePercent.toFixed(2)}%`}));
-    if ((chain.production?.averageBlockTimeSeconds || 0)>6) alerts.push({level:'warning',message:`평균 블록 생성 시간이 ${chain.production.averageBlockTimeSeconds.toFixed(2)}초입니다.`});
+    if (chain.production?.intervalSamples>0 && chain.production.averageBlockTimeSeconds>6) alerts.push({level:'warning',message:`평균 블록 생성 시간이 ${chain.production.averageBlockTimeSeconds.toFixed(2)}초입니다.`});
   }
   return alerts;
 }
@@ -191,11 +236,11 @@ async function snapshot() {
   if (cache.data && Date.now()-cache.at<ttl) return cache.data;
   if (cache.pending) return cache.pending;
   cache.pending=(async()=>{
-    const nodes=await Promise.all(config.nodes.map(inspectNode));
-    const primary=nodes.find(n=>n.online); const tip=primary?.status?.height;
+    const policy=await loadPolicy();const configured=applyPolicy(config.nodes,policy);const nodes=await Promise.all(configured.map(inspectNode));
+    const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.7',chainVersion:'0.22.5',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.9',chainVersion:'0.22.7',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -206,7 +251,14 @@ async function snapshot() {
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 export const server=http.createServer(async(req,res)=>{
   res.setHeader('x-content-type-options','nosniff'); res.setHeader('referrer-policy','no-referrer');
+  res.setHeader('x-frame-options','DENY');res.setHeader('permissions-policy','camera=(), microphone=(), geolocation=()');
+  res.setHeader('cross-origin-resource-policy','same-origin');
   res.setHeader('content-security-policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:");
+  const url=new URL(req.url,'http://localhost');
+  if(!rateAllowed(req,url.pathname.startsWith('/api/admin/')?30:180))return json(res,429,{error:'요청이 너무 많습니다. 잠시 후 다시 시도하세요.'});
+  if(url.pathname.length>512||/[\\\0]/.test(url.pathname)||/(?:\.\.|%2e%2e|wp-admin|\.env|\.git)/i.test(req.url))return json(res,403,{error:'WAF에서 요청을 차단했습니다.'});
+  if(url.pathname.startsWith('/api/admin/')){try{return await adminApi(req,res,url);}catch(error){await audit({action:'admin-error',ip:requestIp(req),error:error.message});return json(res,400,{error:error.message});}}
+  if(!['GET','HEAD'].includes(req.method))return json(res,405,{error:'허용되지 않은 HTTP 메서드입니다.'});
   if(req.url==='/api/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true}));}
   if(req.url.startsWith('/api/explorer/')){try{return await explorerApi(req,res,new URL(req.url,'http://localhost'));}catch(error){return json(res,500,{error:error.message});}}
   if(req.url==='/api/snapshot'){

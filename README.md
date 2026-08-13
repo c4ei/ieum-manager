@@ -1,4 +1,8 @@
+# IEUM Manager 0.3.9
+주소 : https://iem.aah.name
+WAF 반영
 
+docker compose up -d --force-recreate manager indexer
 
 <img width="1372" height="965" alt="image" src="https://github.com/user-attachments/assets/1b615557-0b61-44dd-abc5-5774311581ce" />
 
@@ -75,6 +79,12 @@ sudo systemctl reload caddy
 RPC 포트(8989~8992)는 인터넷에 직접 공개하지 마세요. Manager는 조회 전용이므로 validator key, node key, mnemonic, keystore 비밀번호를 설정 파일에 넣지 않습니다.
 
 ## 운영 확인
+
+### v0.3.9 관리자 제어
+
+`/admin.html`은 `IEUM_MANAGER_ADMIN_TOKEN`(최소 32자) 인증 뒤에만 관리 API를 사용합니다. 토큰은 저장소나 `config.json`이 아닌 운영 `.env`에서만 주입하세요. 정책은 Manager와 인덱서가 신뢰할 RPC 소스를 차단하거나 조회 우선순위를 정하며 합의 투표권·블록 보상·채굴량은 변경하지 않습니다.
+
+관리 API에는 요청 제한, 16 KiB 본문 제한, 동일 Origin, JSON Content-Type, HTTP 메서드 제한, 반복 인증 실패 15분 차단과 JSONL 감사 로그가 적용됩니다. `IEUM_MANAGER_TRUST_PROXY=1`은 Caddy/Cloudflare 뒤에서만 사용하고 Manager 포트를 인터넷에 직접 공개하지 마세요.
 
 ```bash
 sudo systemctl status ieum-manager --no-pager

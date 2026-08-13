@@ -7,10 +7,24 @@ manager.example.com {
         admin $2a$14$REPLACE_WITH_CADDY_HASH
     }
 
+    @scanner path_regexp scanner `(?i)(?:/\.env|/\.git|/wp-admin|/wp-login|\.\./|%2e%2e)`
+    respond @scanner "forbidden" 403
+
+    @invalid_method not method GET HEAD POST PUT
+    respond @invalid_method "method not allowed" 405
+
+    request_body {
+        max_size 16KB
+    }
+
     reverse_proxy 127.0.0.1:8787
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
         -Server
     }
 }

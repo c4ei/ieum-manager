@@ -1,5 +1,12 @@
 # IEUM Manager 변경 내역
 
+## 0.3.9 - 2026-08-13
+
+- 검증자 서명률은 최소 20개 확정 인증서 전까지 `표본 부족`으로 표시
+- genesis와 첫 운영 블록 간격을 평균 블록 시간에서 제외하고 생성·서명 수를 분리
+- 관리자 인증, RPC 소스 차단·조회 우선순위, 즉시 재점검, 감사 로그 추가
+- 관리자 API WAF, 속도·본문·Origin·메서드·Content-Type 제한 추가
+
 ## 0.3.8 - 2026-08-13
 
 - GitHub Actions의 Docker Compose 검증에 CI 전용 `POSTGRES_PASSWORD`를 제공

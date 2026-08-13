@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {pool,query} from './lib/db.js';
 import {rpc,hexToBigInt,toNumber} from './lib/rpc.js';
 import {selectIndexingQuorum} from './lib/quorum.js';
+import {applyPolicy,loadPolicy} from './lib/admin-policy.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const config = JSON.parse(await readFile(process.env.IEUM_MANAGER_CONFIG || join(root,'config.json'),'utf8'));
@@ -11,7 +12,8 @@ const confirmations = Number(process.env.INDEX_CONFIRMATIONS || 0);
 let stopping = false;
 
 async function indexingQuorum() {
-  const observations=await Promise.all(config.nodes.map(async node=>{
+  const policy=await loadPolicy();const eligibleNodes=applyPolicy(config.nodes,policy).filter(node=>!node.admin.blocked);
+  const observations=await Promise.all(eligibleNodes.map(async node=>{
     try {
       const [identity,finalized]=await Promise.all([rpc(node.rpcUrl,'ieum_networkIdentity'),rpc(node.rpcUrl,'ieum_finalizedBlock')]);
       const height=Number(finalized.result.height);

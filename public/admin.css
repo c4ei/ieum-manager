@@ -1,0 +1,6 @@
+.alerts .info{border-left:3px solid var(--cyan)}
+.admin-main{margin:0 auto;max-width:1200px}.admin-login{display:flex;gap:12px;align-items:end;padding:18px;margin:25px 0}.admin-login label{flex:1}
+.admin-main input{display:block;width:100%;margin-top:7px;padding:10px;background:#07100e;color:var(--ink);border:1px solid var(--line)}
+.admin-main button,.admin-main header a{padding:10px 16px;background:#123528;color:var(--green);border:1px solid #2e735a;text-decoration:none;cursor:pointer}.admin-main button:disabled{opacity:.4}
+.admin-main .node label{display:block;margin-top:12px;color:var(--muted)}.admin-main .node-head label{margin:0}.admin-capabilities{padding:20px}.warning-text{color:var(--amber)}
+@media(max-width:720px){.admin-login{display:grid}.admin-main{padding:25px 17px}}
