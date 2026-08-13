@@ -28,4 +28,10 @@ jobs:
       - name: Validate Docker Compose
         env:
           POSTGRES_PASSWORD: ci-only-placeholder
+          IEUM_MANAGER_ADMIN_TOKEN: ci-only-placeholder-32-characters-minimum
         run: docker compose config
+      - name: Build application images without starting PostgreSQL
+        env:
+          POSTGRES_PASSWORD: ci-only-placeholder
+          IEUM_MANAGER_ADMIN_TOKEN: ci-only-placeholder-32-characters-minimum
+        run: docker compose build manager indexer

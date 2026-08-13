@@ -26,6 +26,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-ieum}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ieum_exp}
     volumes:
       - ./config.json:/app/config.json:ro
+      - ieum_manager_data:/app/data
+      - ieum_manager_logs:/app/logs
     ports: 
       - "8787:8787"
     extra_hosts: ["host.docker.internal:host-gateway"]
@@ -43,4 +45,4 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [backend]
 networks: {backend: {}}
-volumes: {ieum_pg_data: {}}
+volumes: {ieum_pg_data: {}, ieum_manager_data: {}, ieum_manager_logs: {}}

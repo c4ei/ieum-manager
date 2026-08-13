@@ -1,5 +1,13 @@
 # IEUM Manager 변경 내역
 
+## 0.3.10 - 2026-08-13
+
+- AAH 관리자 WAF를 참고한 monitor/block, 점수, TTL, IP allow/block 및 자동 격리 UI
+- WAF 차단·감시·인증 실패 감사 로그를 관리자 화면에서 조회
+- 관리자 정책과 감사 로그를 Docker 영구 볼륨으로 보존
+- CI Compose 검증과 이미지 빌드에 비밀이 아닌 전용 placeholder 제공
+- CI에서 PostgreSQL을 시작하지 않고 Manager/Indexer 이미지만 빌드 검증
+
 ## 0.3.9 - 2026-08-13
 
 - 검증자 서명률은 최소 20개 확정 인증서 전까지 `표본 부족`으로 표시

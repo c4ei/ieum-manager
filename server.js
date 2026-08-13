@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {query,dbReady} from './lib/db.js';
-import {applyPolicy,audit,loadPolicy,savePolicy} from './lib/admin-policy.js';
+import {applyPolicy,audit,loadPolicy,recentAudit,savePolicy,wafDecision} from './lib/admin-policy.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
@@ -35,7 +35,16 @@ function sameOrigin(req){const origin=req.headers.origin;if(!origin)return true;
 async function adminApi(req,res,url){
   const ip=requestIp(req);if(!adminAuthorized(req)){await audit({action:'auth-failed',ip});return json(res,401,{error:'관리자 인증이 필요합니다.'});}
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
-  if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),capabilities:{managerRpcPolicy:true,alertRefresh:true,p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),security:{activeAuthBlocks:[...attempts.values()].filter(entry=>entry.blockedUntil>Date.now()).length,trackedRateBuckets:requestBuckets.size},capabilities:{managerRpcPolicy:true,alertRefresh:true,wafAudit:true,p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/events')return json(res,200,{items:await recentAudit(url.searchParams.get('limit'))});
+  if(req.method==='GET'&&url.pathname==='/api/admin/waf'){const policy=await loadPolicy();return json(res,200,{settings:policy.waf,rules:Object.entries(policy.waf.rules||{}).map(([ip,rule])=>({ip,...rule})),quarantine:Object.entries(policy.waf.quarantine||{}).map(([ip,item])=>({ip,...item})),events:await recentAudit(url.searchParams.get('limit')||200)});}
+  if(req.method==='PUT'&&url.pathname==='/api/admin/waf'){
+    if(!String(req.headers['content-type']||'').startsWith('application/json'))return json(res,415,{error:'application/json만 허용합니다.'});const input=await readJson(req),policy=await loadPolicy();
+    if(input.settings)policy.waf={...policy.waf,mode:input.settings.mode==='monitor'?'monitor':'block',scoreThreshold:Math.max(1,Math.min(100,Number(input.settings.scoreThreshold)||10)),blockTtlSeconds:Math.max(60,Math.min(604800,Number(input.settings.blockTtlSeconds)||3600))};
+    if(input.rule){const ip=String(input.rule.ip||'').trim();if(!/^[0-9a-f:.]{2,64}$/i.test(ip))return json(res,400,{error:'올바른 IP를 입력하세요.'});policy.waf.rules[ip]={type:input.rule.type==='allow'?'allow':'block',active:input.rule.active!==false,memo:String(input.rule.memo||'').slice(0,200),updatedAt:new Date().toISOString()};}
+    if(input.releaseIp){delete policy.waf.quarantine[String(input.releaseIp)];if(input.allowReleased)policy.waf.rules[String(input.releaseIp)]={type:'allow',active:true,memo:'관리자 차단 해제',updatedAt:new Date().toISOString()};}
+    await savePolicy(policy);await audit({action:'waf-policy-updated',ip,change:Object.keys(input)});return json(res,200,{ok:true});
+  }
   if(req.method==='PUT'&&url.pathname==='/api/admin/policy'){
     if(!String(req.headers['content-type']||'').startsWith('application/json'))return json(res,415,{error:'application/json만 허용합니다.'});
     const input=await readJson(req);const ids=new Set(config.nodes.map(n=>n.id));const nodes={};
@@ -240,7 +249,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.9',chainVersion:'0.22.7',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.10',chainVersion:'0.22.7',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -255,8 +264,10 @@ export const server=http.createServer(async(req,res)=>{
   res.setHeader('cross-origin-resource-policy','same-origin');
   res.setHeader('content-security-policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:");
   const url=new URL(req.url,'http://localhost');
-  if(!rateAllowed(req,url.pathname.startsWith('/api/admin/')?30:180))return json(res,429,{error:'요청이 너무 많습니다. 잠시 후 다시 시도하세요.'});
-  if(url.pathname.length>512||/[\\\0]/.test(url.pathname)||/(?:\.\.|%2e%2e|wp-admin|\.env|\.git)/i.test(req.url))return json(res,403,{error:'WAF에서 요청을 차단했습니다.'});
+  const policy=await loadPolicy(),clientIp=requestIp(req),decision=wafDecision(policy,clientIp,{path:url.pathname,userAgent:req.headers['user-agent']});
+  if(decision.action!=='allow'){await audit({action:`waf-${decision.action}`,ip:clientIp,method:req.method,path:url.pathname.slice(0,512),score:decision.score,reasons:decision.reasons,userAgent:String(req.headers['user-agent']||'').slice(0,300)});if(decision.action==='block'){policy.waf.quarantine[clientIp]={score:decision.score,reasons:decision.reasons,expiresAt:new Date(Date.now()+Number(policy.waf.blockTtlSeconds||3600)*1000).toISOString()};await savePolicy(policy);return json(res,403,{error:'WAF에서 요청을 차단했습니다.'});}}
+  if(!rateAllowed(req,url.pathname.startsWith('/api/admin/')?30:180)){await audit({action:'waf-rate-limit',ip:requestIp(req),method:req.method,path:url.pathname});return json(res,429,{error:'요청이 너무 많습니다. 잠시 후 다시 시도하세요.'});}
+  if(url.pathname.length>512||/[\\\0]/.test(url.pathname)||/(?:\.\.|%2e%2e|wp-admin|wp-login|\.env|\.git)/i.test(req.url)){await audit({action:'waf-path-block',ip:requestIp(req),method:req.method,path:url.pathname.slice(0,512)});return json(res,403,{error:'WAF에서 요청을 차단했습니다.'});}
   if(url.pathname.startsWith('/api/admin/')){try{return await adminApi(req,res,url);}catch(error){await audit({action:'admin-error',ip:requestIp(req),error:error.message});return json(res,400,{error:error.message});}}
   if(!['GET','HEAD'].includes(req.method))return json(res,405,{error:'허용되지 않은 HTTP 메서드입니다.'});
   if(req.url==='/api/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true}));}

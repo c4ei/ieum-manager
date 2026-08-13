@@ -3,4 +3,5 @@
 .admin-main input{display:block;width:100%;margin-top:7px;padding:10px;background:#07100e;color:var(--ink);border:1px solid var(--line)}
 .admin-main button,.admin-main header a{padding:10px 16px;background:#123528;color:var(--green);border:1px solid #2e735a;text-decoration:none;cursor:pointer}.admin-main button:disabled{opacity:.4}
 .admin-main .node label{display:block;margin-top:12px;color:var(--muted)}.admin-main .node-head label{margin:0}.admin-capabilities{padding:20px}.warning-text{color:var(--amber)}
-@media(max-width:720px){.admin-login{display:grid}.admin-main{padding:25px 17px}}
+.waf-card{border:1px solid var(--line);background:#0d1513;padding:20px;margin-bottom:22px}.waf-form{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:end;margin:15px 0}.waf-form label{color:var(--muted)}.waf-form select{display:block;width:100%;margin-top:7px;padding:10px;background:#07100e;color:var(--ink);border:1px solid var(--line)}
+@media(max-width:720px){.admin-login,.waf-form{display:grid;grid-template-columns:1fr}.admin-main{padding:25px 17px}}
