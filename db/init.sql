@@ -32,3 +32,26 @@ CREATE TABLE IF NOT EXISTS discovered_nodes (
   node_id text PRIMARY KEY, name text NOT NULL, rpc_url text, p2p_address text, version text, height bigint,
   peer_count integer, online boolean NOT NULL DEFAULT false, source_node_id text, last_seen_at timestamptz NOT NULL DEFAULT now(), raw jsonb NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS guilds (
+  id bigserial PRIMARY KEY, name text UNIQUE NOT NULL, description text NOT NULL DEFAULT '', region text NOT NULL DEFAULT '',
+  owner_wallet text NOT NULL, owner_aah_user text NOT NULL, level integer NOT NULL DEFAULT 1 CHECK (level BETWEEN 1 AND 5),
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS guild_members (
+  guild_id bigint NOT NULL REFERENCES guilds(id) ON DELETE CASCADE, wallet text NOT NULL, aah_user text NOT NULL,
+  rank integer NOT NULL DEFAULT 1 CHECK (rank BETWEEN 1 AND 5), joined_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (guild_id,wallet)
+);
+CREATE TABLE IF NOT EXISTS guild_events (
+  id bigserial PRIMARY KEY, guild_id bigint NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+  title text NOT NULL, description text NOT NULL DEFAULT '', starts_at timestamptz NOT NULL, ends_at timestamptz NOT NULL,
+  created_by text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS guild_payment_receipts (
+  tx_hash text PRIMARY KEY, guild_id bigint UNIQUE REFERENCES guilds(id) ON DELETE RESTRICT,
+  sender text NOT NULL, recipient text NOT NULL, amount numeric(78,0) NOT NULL, block_height bigint NOT NULL, verified_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS community_reports (
+  id bigserial PRIMARY KEY, reporter_user text NOT NULL, reporter_wallet text, target_type text NOT NULL CHECK(target_type IN ('guild','member','event')),
+  target_id text NOT NULL, reason text NOT NULL, evidence text NOT NULL DEFAULT '', status text NOT NULL DEFAULT 'received' CHECK(status IN ('received','reviewing','accepted','rejected')),
+  reward_status text NOT NULL DEFAULT 'none' CHECK(reward_status IN ('none','candidate','approved','paid')), reviewer_note text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(), reviewed_at timestamptz
+);

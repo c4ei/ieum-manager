@@ -6,6 +6,11 @@ docker compose config >/dev/null
 docker compose build --no-cache manager indexer
 docker compose up -d --force-recreate manager indexer
 
+docker compose config >/dev/null
+docker compose build --no-cache manager
+docker compose up -d --force-recreate manager
+
+
 <img width="1372" height="965" alt="image" src="https://github.com/user-attachments/assets/1b615557-0b61-44dd-abc5-5774311581ce" />
 
 # IEUM Manager 0.3.7

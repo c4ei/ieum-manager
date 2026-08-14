@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import {query,dbReady} from './lib/db.js';
+import {query,dbReady,pool} from './lib/db.js';
 import {applyPolicy,audit,loadPolicy,recentAudit,savePolicy,wafDecision} from './lib/admin-policy.js';
 
 const root = new URL('.', import.meta.url).pathname;
@@ -19,6 +19,9 @@ const adminToken=process.env.IEUM_MANAGER_ADMIN_TOKEN||'';
 const jwtSecret=process.env.JWT_SECRET||'';
 const attempts=new Map();
 const requestBuckets=new Map();
+const FOUNDATION_WALLET='0x356456fF1216B57a6f8891b195b42d296789B67D';
+const GUILD_PRICE_WEI=1_000_000_000_000_000_000n;
+const GUILD_CAPACITY=[0,20,40,60,80,100];
 
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));};
 const limitOf=(url,fallback=25,max=100)=>Math.min(Math.max(Number(url.searchParams.get('limit'))||fallback,1),max);
@@ -32,6 +35,7 @@ function rateAllowed(req,limit){const key=`${requestIp(req)}:${req.url.startsWit
 const secureEqual=(left,right)=>{const a=Buffer.from(left),b=Buffer.from(right);return a.length===b.length&&timingSafeEqual(a,b);};
 function cookie(req,name){return String(req.headers.cookie||'').split(';').map(value=>value.trim()).find(value=>value.startsWith(`${name}=`))?.slice(name.length+1)||'';}
 function aahAdmin(req){try{const decoded=jwt.verify(decodeURIComponent(cookie(req,'token')),jwtSecret);return decoded?.userType==='A'?decoded:null;}catch{return null;}}
+function aahUser(req){try{return jwt.verify(decodeURIComponent(cookie(req,'token')),jwtSecret)||null;}catch{return null;}}
 function adminAuthorized(req){if(aahAdmin(req))return true;const ip=requestIp(req),now=Date.now(),entry=attempts.get(ip)||{count:0,blockedUntil:0};if(entry.blockedUntil>now)return false;const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');const ok=adminToken.length>=32&&secureEqual(supplied,adminToken);if(ok){attempts.delete(ip);return true;}entry.count++;if(entry.count>=5){entry.blockedUntil=now+15*60_000;entry.count=0;}attempts.set(ip,entry);return false;}
 async function readJson(req,max=16_384){let size=0,body='';for await(const chunk of req){size+=chunk.length;if(size>max)throw new Error('요청 본문이 너무 큽니다.');body+=chunk;}return body?JSON.parse(body):{};}
 function sameOrigin(req){const origin=req.headers.origin;if(!origin)return true;return origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`;}
@@ -96,6 +100,34 @@ async function explorerApi(req,res,url){
   if(path==='/api/explorer/nfts'){const rows=await query("SELECT * FROM tokens WHERE standard IN ('IEUM-721','IEUM-1155') ORDER BY verified DESC,name LIMIT $1 OFFSET $2",[limitOf(url),offsetOf(url)]);return json(res,200,{supported:false,reason:'IEUM Chain NFT 표준 및 이벤트 RPC 추가 후 자동 인덱싱됩니다.',items:rows.rows});}
   if(path==='/api/explorer/nodes'){const rows=await query('SELECT * FROM discovered_nodes ORDER BY online DESC,name');return json(res,200,{discoveryMode:'configured+peer-rpc-ready',items:rows.rows});}
   return json(res,404,{error:'API not found'});
+}
+
+async function guildApi(req,res,url){
+  if(!await dbReady())return json(res,503,{error:'길드 데이터베이스 연결 대기 중'});
+  if(req.method==='GET'&&url.pathname==='/api/guilds'){
+    const rows=await query(`SELECT g.*,count(DISTINCT m.wallet)::int member_count,count(DISTINCT e.id)::int event_count,
+      (count(DISTINCT m.wallet)*10+count(DISTINCT e.id)*5)::int popularity
+      FROM guilds g LEFT JOIN guild_members m ON m.guild_id=g.id LEFT JOIN guild_events e ON e.guild_id=g.id
+      GROUP BY g.id ORDER BY popularity DESC,g.created_at ASC LIMIT 100`);
+    return json(res,200,{items:rows.rows.map(g=>({...g,capacity:GUILD_CAPACITY[g.level]})),rankNames:['','새싹','길드원','운영진','부길드장','길드장']});
+  }
+  if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
+  const user=aahUser(req);if(!user)return json(res,401,{error:'AAH 로그인이 필요합니다.'});
+  if(req.method==='POST'&&url.pathname==='/api/guilds'){
+    const input=await readJson(req),name=String(input.name||'').trim(),wallet=String(input.ownerWallet||'').trim(),txHash=String(input.paymentTxHash||'').trim();
+    if(name.length<2||name.length>30)return json(res,400,{error:'길드명은 2~30자로 입력하세요.'});
+    if(!validAddress(wallet)||!validHash(txHash))return json(res,400,{error:'지갑 주소 또는 결제 거래 해시를 확인하세요.'});
+    const found=await query('SELECT hash,block_height,sender,recipient,value FROM transactions WHERE lower(hash)=lower($1)',[txHash]);const paid=found.rows[0];
+    if(!paid||paid.sender.toLowerCase()!==wallet.toLowerCase()||paid.recipient.toLowerCase()!==FOUNDATION_WALLET.toLowerCase()||BigInt(paid.value)<GUILD_PRICE_WEI)return json(res,400,{error:'재단지갑으로 확정된 1 IEUM 결제를 찾지 못했습니다.'});
+    const used=await query('SELECT 1 FROM guild_payment_receipts WHERE lower(tx_hash)=lower($1)',[txHash]);if(used.rows[0])return json(res,409,{error:'이미 사용한 결제 거래입니다.'});
+    const identity=String(user.email||user.username||user.sub);
+    const client=await pool.connect();try{await client.query('BEGIN');const made=await client.query('INSERT INTO guilds(name,description,region,owner_wallet,owner_aah_user) VALUES($1,$2,$3,$4,$5) RETURNING *',[name,String(input.description||'').slice(0,300),String(input.region||'').slice(0,50),wallet,identity]);await client.query('INSERT INTO guild_members(guild_id,wallet,aah_user,rank) VALUES($1,$2,$3,5)',[made.rows[0].id,wallet,identity]);await client.query('INSERT INTO guild_payment_receipts(tx_hash,guild_id,sender,recipient,amount,block_height) VALUES($1,$2,$3,$4,$5,$6)',[txHash,made.rows[0].id,paid.sender,paid.recipient,paid.value,paid.block_height]);await client.query('COMMIT');return json(res,201,{guild:{...made.rows[0],capacity:20},payment:{recipient:FOUNDATION_WALLET,amount:'1 IEUM',finalized:true}});}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }
+  if(req.method==='POST'&&url.pathname==='/api/guilds/reports'){
+    const input=await readJson(req),type=String(input.targetType||'');if(!['guild','member','event'].includes(type)||!String(input.reason||'').trim())return json(res,400,{error:'신고 대상과 사유를 입력하세요.'});
+    const made=await query('INSERT INTO community_reports(reporter_user,reporter_wallet,target_type,target_id,reason,evidence) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,status,reward_status',[String(user.email||user.username||user.sub),validAddress(input.reporterWallet)?input.reporterWallet:null,type,String(input.targetId||'').slice(0,100),String(input.reason).slice(0,500),String(input.evidence||'').slice(0,1000)]);return json(res,201,{report:made.rows[0],notice:'포상은 운영자 심사 후 별도 승인되며 자동 지급되지 않습니다.'});
+  }
+  return json(res,404,{error:'길드 API를 찾을 수 없습니다.'});
 }
 
 export function hexToBigInt(value) {
@@ -167,17 +199,19 @@ async function inspectWallets(primary) {
 async function inspectChain(primary) {
   if (!primary) return {available:false};
   try {
-    const [supply, validators, production, balances] = await Promise.all([
+    const [supply, validators, production, balances, holderReward] = await Promise.all([
       rpc(primary.rpcUrl, 'ieum_supplyStatus'),
       rpc(primary.rpcUrl, 'ieum_validatorStatus', [Number(config.validatorWindow) || 1000]),
       inspectProduction(primary),
-      rpc(primary.rpcUrl, 'ieum_addressBalances', [0, Math.min(Number(config.accountLimit) || 100, 1000)])
+      rpc(primary.rpcUrl, 'ieum_addressBalances', [0, Math.min(Number(config.accountLimit) || 100, 1000)]),
+      rpc(primary.rpcUrl, 'ieum_holderRewardStatus').catch(()=>({result:null}))
     ]);
     const decimals = supply.result.decimals ?? config.unitDecimals ?? 18;
     return {
       available:true,
-      supply:{...supply.result,totalIssuedFormatted:formatUnits(supply.result.totalIssued,decimals),
-        circulatingFormatted:formatUnits(supply.result.circulating,decimals),lockedFormatted:formatUnits(supply.result.locked,decimals)},
+      supply:{...supply.result,totalIssuedFormatted:formatUnits(supply.result.Bal_All??supply.result.totalIssued,decimals),
+        circulatingFormatted:formatUnits(supply.result.Bal_Utong_All??supply.result.circulating,decimals),lockedFormatted:formatUnits(supply.result.Bal_Lock_All??supply.result.locked,decimals)},
+      holderReward:holderReward.result,
       validators:validators.result,
       validatorMinimumSamples:Math.max(1,Number(config.validatorMinimumSamples)||20),
       production,
@@ -254,7 +288,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.11',chainVersion:'0.22.7',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.12',chainVersion:'0.22.9',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -274,6 +308,7 @@ export const server=http.createServer(async(req,res)=>{
   if(!rateAllowed(req,url.pathname.startsWith('/api/admin/')?30:180)){await audit({action:'waf-rate-limit',ip:requestIp(req),method:req.method,path:url.pathname});return json(res,429,{error:'요청이 너무 많습니다. 잠시 후 다시 시도하세요.'});}
   if(url.pathname.length>512||/[\\\0]/.test(url.pathname)||/(?:\.\.|%2e%2e|wp-admin|wp-login|\.env|\.git)/i.test(req.url)){await audit({action:'waf-path-block',ip:requestIp(req),method:req.method,path:url.pathname.slice(0,512)});return json(res,403,{error:'WAF에서 요청을 차단했습니다.'});}
   if(url.pathname.startsWith('/api/admin/')){try{return await adminApi(req,res,url);}catch(error){await audit({action:'admin-error',ip:requestIp(req),error:error.message});return json(res,400,{error:error.message});}}
+  if(url.pathname.startsWith('/api/guilds')){try{return await guildApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
   if(!['GET','HEAD'].includes(req.method))return json(res,405,{error:'허용되지 않은 HTTP 메서드입니다.'});
   if(req.url==='/api/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true}));}
   if(req.url.startsWith('/api/explorer/')){try{return await explorerApi(req,res,new URL(req.url,'http://localhost'));}catch(error){return json(res,500,{error:error.message});}}
