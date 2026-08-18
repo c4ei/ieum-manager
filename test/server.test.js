@@ -21,6 +21,12 @@ test('production summary excludes genesis and separates producers',()=>{
   const result=summarizeProduction([{height:1,timestamp:100,producer:'a'},{height:2,timestamp:103,producer:'b'}]);
   assert.equal(result.averageBlockTimeSeconds,3);assert.equal(result.intervalSamples,1);assert.deepEqual(result.producerBlocks,{a:1,b:1});assert.equal(result.genesisExcluded,true);
 });
+test('guild payment compatibility stores the canonical indexed transaction hash',async()=>{
+  const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
+  assert.match(source,/LEFT JOIN guild_payment_receipts/);
+  assert.match(source,/\[paid\.hash,made\.rows\[0\]\.id/);
+  assert.match(source,/0x356456ff1216b57a6f8891b195b42d296789b67d/);
+});
 const {selectIndexingQuorum}=await import('../lib/quorum.js');
 test('indexer requires two identical finalized tips',()=>{
   const base={online:true,identity:{chainId:21004,genesisHash:'0xgenesis'},finalized:{height:9,hash:'0xblock'}};

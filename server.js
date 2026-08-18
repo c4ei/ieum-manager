@@ -19,7 +19,7 @@ const adminToken=process.env.IEUM_MANAGER_ADMIN_TOKEN||'';
 const jwtSecret=process.env.JWT_SECRET||'';
 const attempts=new Map();
 const requestBuckets=new Map();
-const FOUNDATION_WALLET='0x356456fF1216B57a6f8891b195b42d296789B67D';
+const FOUNDATION_WALLET='0x356456ff1216b57a6f8891b195b42d296789b67d';
 const GUILD_PRICE_WEI=1_000_000_000_000_000_000n;
 const GUILD_CAPACITY=[0,20,40,60,80,100];
 
@@ -118,11 +118,21 @@ async function guildApi(req,res,url){
     const input=await readJson(req),name=String(input.name||'').trim(),wallet=String(input.ownerWallet||'').trim(),txHash=String(input.paymentTxHash||'').trim();
     if(name.length<2||name.length>30)return json(res,400,{error:'길드명은 2~30자로 입력하세요.'});
     if(!validAddress(wallet)||!validHash(txHash))return json(res,400,{error:'지갑 주소 또는 결제 거래 해시를 확인하세요.'});
-    const found=await query('SELECT hash,block_height,sender,recipient,value FROM transactions WHERE lower(hash)=lower($1)',[txHash]);const paid=found.rows[0];
-    if(!paid||paid.sender.toLowerCase()!==wallet.toLowerCase()||paid.recipient.toLowerCase()!==FOUNDATION_WALLET.toLowerCase()||BigInt(paid.value)<GUILD_PRICE_WEI)return json(res,400,{error:'재단지갑으로 확정된 1 IEUM 결제를 찾지 못했습니다.'});
-    const used=await query('SELECT 1 FROM guild_payment_receipts WHERE lower(tx_hash)=lower($1)',[txHash]);if(used.rows[0])return json(res,409,{error:'이미 사용한 결제 거래입니다.'});
+    const found=await query('SELECT hash,block_height,sender,recipient,value FROM transactions WHERE lower(hash)=lower($1)',[txHash]);let paid=found.rows[0];
+    if(paid&&(paid.sender.toLowerCase()!==wallet.toLowerCase()||paid.recipient.toLowerCase()!==FOUNDATION_WALLET||BigInt(paid.value)<GUILD_PRICE_WEI))return json(res,400,{error:'입력한 거래가 해당 지갑의 길드 생성 결제가 아닙니다.'});
+    if(!paid){
+      const compatible=await query(`SELECT t.hash,t.block_height,t.sender,t.recipient,t.value FROM transactions t
+        LEFT JOIN guild_payment_receipts r ON lower(r.tx_hash)=lower(t.hash)
+        WHERE lower(t.sender)=lower($1) AND lower(t.recipient)=lower($2)
+          AND t.value::numeric >= $3::numeric AND r.tx_hash IS NULL
+        ORDER BY t.block_height DESC,t.tx_index DESC LIMIT 2`,[wallet,FOUNDATION_WALLET,GUILD_PRICE_WEI.toString()]);
+      if(compatible.rows.length===1)paid=compatible.rows[0];
+      else if(compatible.rows.length>1)return json(res,409,{error:'사용하지 않은 1 IEUM 결제가 여러 건입니다. Explorer에 표시된 확정 거래 해시를 입력하세요.'});
+    }
+    if(!paid)return json(res,400,{error:'재단지갑으로 확정된 1 IEUM 결제를 찾지 못했습니다. 인덱서 동기화 상태를 확인하세요.'});
+    const used=await query('SELECT 1 FROM guild_payment_receipts WHERE lower(tx_hash)=lower($1)',[paid.hash]);if(used.rows[0])return json(res,409,{error:'이미 사용한 결제 거래입니다.'});
     const identity=String(user.email||user.username||user.sub);
-    const client=await pool.connect();try{await client.query('BEGIN');const made=await client.query('INSERT INTO guilds(name,description,region,owner_wallet,owner_aah_user) VALUES($1,$2,$3,$4,$5) RETURNING *',[name,String(input.description||'').slice(0,300),String(input.region||'').slice(0,50),wallet,identity]);await client.query('INSERT INTO guild_members(guild_id,wallet,aah_user,rank) VALUES($1,$2,$3,5)',[made.rows[0].id,wallet,identity]);await client.query('INSERT INTO guild_payment_receipts(tx_hash,guild_id,sender,recipient,amount,block_height) VALUES($1,$2,$3,$4,$5,$6)',[txHash,made.rows[0].id,paid.sender,paid.recipient,paid.value,paid.block_height]);await client.query('COMMIT');return json(res,201,{guild:{...made.rows[0],capacity:20},payment:{recipient:FOUNDATION_WALLET,amount:'1 IEUM',finalized:true}});}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    const client=await pool.connect();try{await client.query('BEGIN');const made=await client.query('INSERT INTO guilds(name,description,region,owner_wallet,owner_aah_user) VALUES($1,$2,$3,$4,$5) RETURNING *',[name,String(input.description||'').slice(0,300),String(input.region||'').slice(0,50),wallet,identity]);await client.query('INSERT INTO guild_members(guild_id,wallet,aah_user,rank) VALUES($1,$2,$3,5)',[made.rows[0].id,wallet,identity]);await client.query('INSERT INTO guild_payment_receipts(tx_hash,guild_id,sender,recipient,amount,block_height) VALUES($1,$2,$3,$4,$5,$6)',[paid.hash,made.rows[0].id,paid.sender,paid.recipient,paid.value,paid.block_height]);await client.query('COMMIT');return json(res,201,{guild:{...made.rows[0],capacity:20},payment:{recipient:FOUNDATION_WALLET,amount:'1 IEUM',finalized:true,transactionHash:paid.hash,submittedHash:txHash}});}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }
   if(req.method==='POST'&&url.pathname==='/api/guilds/reports'){
     const input=await readJson(req),type=String(input.targetType||'');if(!['guild','member','event'].includes(type)||!String(input.reason||'').trim())return json(res,400,{error:'신고 대상과 사유를 입력하세요.'});
@@ -289,7 +299,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.15',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.16',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
