@@ -28,6 +28,7 @@ const limitOf=(url,fallback=25,max=100)=>Math.min(Math.max(Number(url.searchPara
 const offsetOf=url=>Math.max(Number(url.searchParams.get('offset'))||0,0);
 const pageOf=url=>Math.max(Number(url.searchParams.get('page'))||1,1);
 const paging=(url,total,fallback=25,max=100)=>{const limit=limitOf(url,fallback,max);const page=pageOf(url);const offset=(page-1)*limit;const pages=Math.max(Math.ceil(Number(total)/limit),1);return {limit,page,offset,total:Number(total),pages,previous:page>1?page-1:null,next:page<pages?page+1:null};};
+export const normalizeExplorerTerm=value=>{const term=String(value||'').trim();return /^[0-9a-f]{64}$/i.test(term)?`0x${term}`:term;};
 const validHash=value=>/^0x[0-9a-f]{64}$/i.test(value||'');
 const validAddress=value=>/^0x[0-9a-f]{40}$/i.test(value||'');
 const requestIp=req=>String(process.env.IEUM_MANAGER_TRUST_PROXY==='1'?(req.headers['cf-connecting-ip']||req.headers['x-real-ip']||req.socket.remoteAddress):(req.socket.remoteAddress||'unknown')).split(',')[0].trim();
@@ -82,7 +83,7 @@ async function explorerApi(req,res,url){
     const rows=await query('SELECT address,balance,locked,tx_count,last_seen_height FROM address_balances ORDER BY balance DESC LIMIT $1',[limitOf(url,100,100)]);return json(res,200,{items:rows.rows});
   }
   if(path==='/api/explorer/search'){
-    const term=(url.searchParams.get('q')||'').trim();
+    const term=normalizeExplorerTerm(url.searchParams.get('q'));
     if(/^\d+$/.test(term)) return json(res,200,{type:'block',target:`/api/explorer/block/${term}`});
     if(validHash(term)){const block=await query('SELECT 1 FROM blocks WHERE lower(hash)=lower($1)',[term]);return json(res,200,block.rows[0]?{type:'block',target:`/api/explorer/block/hash/${term}`}:{type:'transaction',target:`/api/explorer/transaction/${term}`});}
     if(validAddress(term)) return json(res,200,{type:'address',target:`/api/explorer/address/${term}`});
@@ -288,7 +289,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.12',chainVersion:'0.22.9',nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.15',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -317,8 +318,8 @@ export const server=http.createServer(async(req,res)=>{
     catch(error){res.writeHead(503,{'content-type':'application/json'});return res.end(JSON.stringify({error:error.message}));}
   }
   const pathname = new URL(req.url, 'http://localhost').pathname;
-  const detailRoutes=new Set(['/nodes','/validators','/accounts','/transactions','/explorer']);const adminRoutes=/^\/admin(?:\/dashboard|\/rpc|\/waf|\/blocked|\/audit)?$/;
-  const requested = pathname === '/' ? 'index.html' : detailRoutes.has(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
+  const detailRoutes=new Set(['/nodes','/validators','/accounts','/transactions','/explorer']);const entityRoute=/^\/(?:tx|address|block)\/[^/]+$/;const adminRoutes=/^\/admin(?:\/dashboard|\/rpc|\/waf|\/blocked|\/audit)?$/;
+  const requested = pathname === '/' ? 'index.html' : detailRoutes.has(pathname)||entityRoute.test(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
   const safe=normalize(requested).replace(/^(\.\.(\/|\\|$))+/,''); const path=join(root,'public',safe);
   try{const body=await readFile(path);res.writeHead(200,{'content-type':mime[extname(path)]||'application/octet-stream','cache-control':'public, max-age=300'});res.end(body);}
   catch{res.writeHead(404);res.end('Not found');}
