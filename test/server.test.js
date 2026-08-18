@@ -28,6 +28,18 @@ test('guild payment compatibility stores the canonical indexed transaction hash'
   assert.match(source,/0x356456ff1216b57a6f8891b195b42d296789b67d/);
 });
 const {selectIndexingQuorum}=await import('../lib/quorum.js');
+const {normalizePeer,peerAddressParts,peerSummary}=await import('../lib/peers.js');
+test('peer endpoint parser supports IPv4 and bracketed IPv6',()=>{
+  assert.deepEqual(peerAddressParts('203.0.113.7:7001'),{address:'203.0.113.7:7001',ip:'203.0.113.7',port:7001});
+  assert.deepEqual(peerAddressParts('[2001:db8::1]:7001'),{address:'[2001:db8::1]:7001',ip:'2001:db8::1',port:7001});
+});
+test('peer normalization never invents wallet, country, or version data',()=>{
+  const peer=normalizePeer({node_id:'peer-a',p2p_address:'203.0.113.7:7001',online:true,peer_count:4,raw:{direction:'outbound'}});
+  assert.equal(peer.nodeId,'peer-a');assert.equal(peer.ip,'203.0.113.7');assert.equal(peer.country,null);assert.equal(peer.walletAddress,null);assert.equal(peer.version,null);
+});
+test('peer summary counts unique node IDs separately from connections',()=>{
+  assert.deepEqual(peerSummary([{nodeId:'a',online:true,peerCount:4,version:'1'},{nodeId:'a',online:true,peerCount:4,version:'1'},{nodeId:'b',online:false,peerCount:2,version:null}]),{uniquePeers:2,onlinePeers:2,totalConnections:10,versions:['1']});
+});
 test('indexer requires two identical finalized tips',()=>{
   const base={online:true,identity:{chainId:21004,genesisHash:'0xgenesis'},finalized:{height:9,hash:'0xblock'}};
   assert.equal(selectIndexingQuorum([{...base,node:{id:'a'}},{...base,node:{id:'b'}}],2).length,2);

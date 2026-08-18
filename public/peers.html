@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IEUM 관리자 · 연결 피어</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"></head>
+<body><aside><div class="brand"><i>∞</i><div><b>IEUM</b><span>ADMIN</span></div></div><nav><a href="/admin/dashboard">Dashboard</a><a href="/admin/rpc">RPC Nodes</a><a class="active" href="/admin/peers">Network Peers</a><a href="/admin/waf">WAF Settings</a><a href="/admin/audit">Audit Logs</a><a href="/">Public</a></nav></aside>
+<main class="admin-main"><header><div><p class="eyebrow">PRIVATE NETWORK TOPOLOGY</p><h1>연결 피어 <span>상세</span></h1><p class="lead">Node ID 기준 고유 피어와 연결 상태를 관리자에게만 표시합니다.</p></div><a href="/">관제로 돌아가기</a></header>
+<section class="panel admin-login"><label>비상 관리자 토큰<input id="admin-token" type="password" autocomplete="off"></label><button id="peer-connect">인증·조회</button><button id="peer-refresh" disabled>새로고침</button><p id="peer-message">AAH 관리자 JWT는 자동 인증됩니다.</p></section>
+<section><div id="peer-summary" class="cards"></div></section>
+<section class="waf-card"><div class="section-title"><div><p class="eyebrow">DISCOVERED NODES</p><h2>고유 피어 목록</h2></div><small id="peer-updated">조회 대기</small></div><p class="warning-text">IP·국가·지갑·상대 피어 정보는 Chain RPC가 실제 제공한 값만 표시하며 추정하지 않습니다.</p><div class="table-wrap"><table><thead><tr><th>상태</th><th>Node ID</th><th>IP:Port</th><th>국가</th><th>버전</th><th>높이</th><th>피어</th><th>방향</th><th>온라인/최근 관측</th><th>수집 노드</th></tr></thead><tbody id="peer-body"><tr><td colspan="10" class="empty">관리자 인증 후 표시됩니다.</td></tr></tbody></table></div></section>
+<section id="peer-detail" class="panel peer-detail" hidden></section>
+<section class="panel admin-capabilities"><h2>정보 제공 범위</h2><p>국가: GeoIP 또는 Chain 값이 있을 때만 표시 · 메인 지갑/잔액: 노드가 서명해 제공할 때만 신뢰 · 상대 피어: 원격 노드가 토폴로지를 제공할 때만 표시</p></section>
+</main><script src="/admin-peers.js"></script></body></html>

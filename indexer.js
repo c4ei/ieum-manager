@@ -93,6 +93,7 @@ async function ensureChainIdentity(url, tip) {
 async function cycle() {
   const quorum=await indexingQuorum(); const url=quorum[0].node.rpcUrl; const tip=quorum[0].finalized.height-confirmations;
   await ensureChainIdentity(url,tip);
+  await query('UPDATE discovered_nodes SET online=false WHERE source_node_id IS NOT NULL');
   for (const node of config.nodes) {
     try {
       const status=(await rpc(node.rpcUrl,'ieum_nodeStatus')).result;

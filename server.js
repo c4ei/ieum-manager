@@ -6,6 +6,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {query,dbReady,pool} from './lib/db.js';
 import {applyPolicy,audit,loadPolicy,recentAudit,savePolicy,wafDecision} from './lib/admin-policy.js';
+import {normalizePeer,peerSummary} from './lib/peers.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
@@ -47,6 +48,18 @@ async function adminApi(req,res,url){
   if(req.method==='GET'&&url.pathname==='/api/admin/session'){const user=aahAdmin(req);return json(res,200,{authenticated:true,source:user?'aah-jwt':'emergency-token',user:user?{email:user.email,username:user.username}:null});}
   if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),security:{activeAuthBlocks:[...attempts.values()].filter(entry=>entry.blockedUntil>Date.now()).length,trackedRateBuckets:requestBuckets.size},capabilities:{managerRpcPolicy:true,alertRefresh:true,wafAudit:true,p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
   if(req.method==='GET'&&url.pathname==='/api/admin/events')return json(res,200,{items:await recentAudit(url.searchParams.get('limit'))});
+  if(req.method==='GET'&&url.pathname==='/api/admin/peers'){
+    if(!await dbReady())return json(res,503,{error:'피어 데이터베이스 연결 대기 중'});
+    const rows=await query('SELECT node_id,name,p2p_address,version,height,peer_count,online,source_node_id,last_seen_at,raw FROM discovered_nodes ORDER BY online DESC,last_seen_at DESC,name');
+    const configured=new Set(config.nodes.map(node=>node.id));const items=rows.rows.filter(row=>!configured.has(row.node_id)).map(row=>normalizePeer(row));
+    return json(res,200,{generatedAt:new Date().toISOString(),summary:peerSummary(items),items,limitations:{country:'GeoIP 또는 Chain 제공 값이 있을 때만 표시',wallet:'노드가 서명해 제공한 주소만 신뢰 가능',topology:'상대 노드가 제공한 경우에만 표시'}});
+  }
+  const peerMatch=url.pathname.match(/^\/api\/admin\/peers\/([^/]+)$/);
+  if(req.method==='GET'&&peerMatch){
+    if(!await dbReady())return json(res,503,{error:'피어 데이터베이스 연결 대기 중'});const nodeId=decodeURIComponent(peerMatch[1]);
+    const rows=await query('SELECT node_id,name,p2p_address,version,height,peer_count,online,source_node_id,last_seen_at,raw FROM discovered_nodes WHERE node_id=$1',[nodeId]);
+    return rows.rows[0]?json(res,200,{peer:normalizePeer(rows.rows[0])}):json(res,404,{error:'피어를 찾을 수 없습니다.'});
+  }
   if(req.method==='GET'&&url.pathname==='/api/admin/waf'){const policy=await loadPolicy();return json(res,200,{settings:policy.waf,rules:Object.entries(policy.waf.rules||{}).map(([ip,rule])=>({ip,...rule})),quarantine:Object.entries(policy.waf.quarantine||{}).map(([ip,item])=>({ip,...item})),events:await recentAudit(url.searchParams.get('limit')||200)});}
   if(req.method==='PUT'&&url.pathname==='/api/admin/waf'){
     if(!String(req.headers['content-type']||'').startsWith('application/json'))return json(res,415,{error:'application/json만 허용합니다.'});const input=await readJson(req),policy=await loadPolicy();
@@ -299,7 +312,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.17',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.18',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -319,6 +332,7 @@ export const server=http.createServer(async(req,res)=>{
   if(!rateAllowed(req,url.pathname.startsWith('/api/admin/')?30:180)){await audit({action:'waf-rate-limit',ip:requestIp(req),method:req.method,path:url.pathname});return json(res,429,{error:'요청이 너무 많습니다. 잠시 후 다시 시도하세요.'});}
   if(url.pathname.length>512||/[\\\0]/.test(url.pathname)||/(?:\.\.|%2e%2e|wp-admin|wp-login|\.env|\.git)/i.test(req.url)){await audit({action:'waf-path-block',ip:requestIp(req),method:req.method,path:url.pathname.slice(0,512)});return json(res,403,{error:'WAF에서 요청을 차단했습니다.'});}
   if(url.pathname.startsWith('/api/admin/')){try{return await adminApi(req,res,url);}catch(error){await audit({action:'admin-error',ip:requestIp(req),error:error.message});return json(res,400,{error:error.message});}}
+  if(url.pathname==='/api/session')return json(res,200,{admin:Boolean(aahAdmin(req))});
   if(url.pathname.startsWith('/api/guilds')){try{return await guildApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
   if(!['GET','HEAD'].includes(req.method))return json(res,405,{error:'허용되지 않은 HTTP 메서드입니다.'});
   if(req.url==='/api/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true}));}
@@ -328,8 +342,8 @@ export const server=http.createServer(async(req,res)=>{
     catch(error){res.writeHead(503,{'content-type':'application/json'});return res.end(JSON.stringify({error:error.message}));}
   }
   const pathname = new URL(req.url, 'http://localhost').pathname;
-  const detailRoutes=new Set(['/nodes','/validators','/accounts','/transactions','/explorer']);const entityRoute=/^\/(?:tx|address|block)\/[^/]+$/;const adminRoutes=/^\/admin(?:\/dashboard|\/rpc|\/waf|\/blocked|\/audit)?$/;
-  const requested = pathname === '/' ? 'index.html' : detailRoutes.has(pathname)||entityRoute.test(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
+  const detailRoutes=new Set(['/nodes','/validators','/accounts','/transactions','/explorer']);const entityRoute=/^\/(?:tx|address|block)\/[^/]+$/;const adminRoutes=/^\/admin(?:\/dashboard|\/rpc|\/waf|\/blocked|\/audit|\/peers)?$/;
+  const requested = pathname === '/' ? 'index.html' : pathname==='/admin/peers'?'peers.html':detailRoutes.has(pathname)||entityRoute.test(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
   const safe=normalize(requested).replace(/^(\.\.(\/|\\|$))+/,''); const path=join(root,'public',safe);
   try{const body=await readFile(path);res.writeHead(200,{'content-type':mime[extname(path)]||'application/octet-stream','cache-control':'public, max-age=300'});res.end(body);}
   catch{res.writeHead(404);res.end('Not found');}
