@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
 process.env.IEUM_MANAGER_CONFIG=new URL('../config.example.json',import.meta.url).pathname;
 process.env.IEUM_MANAGER_PORT='0';
-const {hexToBigInt,formatUnits,summarizeProduction,normalizeExplorerTerm}=await import('../server.js');
+const {hexToBigInt,formatUnits,summarizeProduction,normalizeExplorerTerm,verifySnsClaim}=await import('../server.js');
 test('explorer accepts hashes with or without 0x',()=>{const hash='cf91fb3db2bac80635129cb54a9f6eaecefca2e100853000033eceb424de3574';assert.equal(normalizeExplorerTerm(hash),`0x${hash}`);assert.equal(normalizeExplorerTerm(`0x${hash}`),`0x${hash}`);});
 test('hex quantity parser',()=>assert.equal(hexToBigInt('0x2a'),42n));
 test('unit formatter',()=>assert.equal(formatUnits(1234500000000000000n,18),'1.2345'));
@@ -39,6 +39,16 @@ test('peer normalization never invents wallet, country, or version data',()=>{
 });
 test('peer summary counts unique node IDs separately from connections',()=>{
   assert.deepEqual(peerSummary([{nodeId:'a',online:true,peerCount:4,version:'1'},{nodeId:'a',online:true,peerCount:4,version:'1'},{nodeId:'b',online:false,peerCount:2,version:null}]),{uniquePeers:2,onlinePeers:2,totalConnections:10,versions:['1']});
+});
+test('sns verifier outage keeps the claim pending for manual review',async()=>{
+  const claim={status:'pending',verification:'manual-review',reviewerNote:''};
+  const result=await verifySnsClaim(claim,{verifyUrl:'https://verify.example.test',fetchImpl:async()=>{throw new Error('offline');}});
+  assert.equal(result.status,'pending');assert.equal(result.verification,'platform-api-unavailable');assert.match(result.reviewerNote,/장애/);
+});
+test('sns verifier can approve a verified claim',async()=>{
+  const claim={status:'pending',verification:'manual-review',reviewerNote:''};
+  const result=await verifySnsClaim(claim,{verifyUrl:'https://verify.example.test',fetchImpl:async()=>({ok:true,json:async()=>({verified:true,platformAccountId:'account-1',postId:'post-1'})})});
+  assert.equal(result.status,'approved');assert.equal(result.verification,'platform-api');assert.equal(result.postId,'post-1');
 });
 test('indexer requires two identical finalized tips',()=>{
   const base={online:true,identity:{chainId:21004,genesisHash:'0xgenesis'},finalized:{height:9,hash:'0xblock'}};
