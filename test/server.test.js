@@ -12,10 +12,10 @@ test('unit formatter rounds at 8 decimals without losing integer precision',()=>
   assert.equal(formatUnits(4000000000n,18),'0');
   assert.equal(formatUnits(5000000000n,18),'0.00000001');
 });
-test('example config pins the Chain v0.22.5 genesis hash',async()=>{
+test('example config pins the IEUM mainnet genesis hash',async()=>{
   const config=JSON.parse(await readFile(new URL('../config.example.json',import.meta.url),'utf8'));
   assert.equal(config.expectedChainId,21004);
-  assert.equal(config.expectedGenesisHash,'0x497e04ac4faec01b78b57d3caef7951fca98b1928a1af558ea03a663aa622418');
+  assert.equal(config.expectedGenesisHash,'0xc7a4f99b113341db7705117dedb240bb3ea3b0b99c115d134ddf505be1ff8a5a');
 });
 test('production summary excludes genesis and separates producers',()=>{
   const result=summarizeProduction([{height:1,timestamp:100,producer:'a'},{height:2,timestamp:103,producer:'b'}]);
