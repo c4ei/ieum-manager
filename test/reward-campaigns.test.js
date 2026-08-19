@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {assertNoOverlap,assertSnsClaimUnique,holderConfig,normalizeCampaign,sanitizePayout,sanitizeSnsClaim} from '../lib/reward-campaigns.js';
+
+const holder=(overrides={})=>normalizeCampaign({type:'holder',name:'첫 보유 응원',startsAt:'2026-09-01T00:00:00+09:00',endsAt:'2026-09-08T00:00:00+09:00',annualRateBps:500,minimumBalance:'1000000000000000000',maximumDailyTotal:'100000000000000000000',...overrides});
+test('holder campaign exports deterministic chain config',()=>{const campaign=holder({status:'active'}),config=holderConfig(campaign);assert.equal(config.enabled,true);assert.equal(config.annual_rate_bps,500);assert.equal(config.starts_at,1788188400);});
+test('campaign dates cannot overlap',()=>{const first=holder();const second=holder({name:'겹침',startsAt:'2026-09-07T00:00:00+09:00',endsAt:'2026-09-10T00:00:00+09:00'});assert.throws(()=>assertNoOverlap(second,[first]),/중복/);});
+test('onboarding campaign contains the requested five rewards',()=>{const campaign=normalizeCampaign({type:'onboarding',name:'IEUM Pioneer',startsAt:'2026-10-01T00:00:00+09:00',endsAt:'2026-10-08T00:00:00+09:00'});assert.equal(campaign.tasks.length,5);assert.equal(campaign.tasks[0].amount,'10000000000000000');});
+test('manual payout validates address and amount',()=>{const payout=sanitizePayout({campaignId:'c1',address:'0x1111111111111111111111111111111111111111',amount:'10000000000000000'});assert.equal(payout.address,'0x1111111111111111111111111111111111111111');});
+test('sns reward is fixed at 0.01 IEUM and one claim per account',()=>{const claim=sanitizeSnsClaim({address:'0x1111111111111111111111111111111111111111',platform:'x',account:'ieum_user',postUrl:'https://x.com/ieum_user/status/1'},{userId:'user-1',ip:'127.0.0.1'});assert.equal(claim.amount,'10000000000000000');assert.throws(()=>assertSnsClaimUnique({...claim,id:'other'},[claim]),/계정당 1회/);});

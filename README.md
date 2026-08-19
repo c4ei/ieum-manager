@@ -1,4 +1,7 @@
-# IEUM Manager 0.3.9
+# IEUM Manager 0.3.19
+
+보유 보상과 최초 참여 보상 이벤트 관리, 기간 중복 방지, Chain 설정 생성과 확정 지급
+조회는 [`docs/VERSION_0.3.19.md`](docs/VERSION_0.3.19.md)를 참고하세요.
 주소 : https://iem.aah.name
 WAF 반영
 
