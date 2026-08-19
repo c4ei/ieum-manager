@@ -7,3 +7,4 @@
 @media(max-width:720px){.admin-login,.waf-form{display:grid;grid-template-columns:1fr}.admin-main{padding:25px 17px}}
 .peer-row{cursor:pointer}.peer-row:hover,.peer-row:focus{background:#10211c}.peer-detail{padding:20px;margin-bottom:22px}.peer-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.peer-fields div{padding:12px;border:1px solid var(--line)}.peer-fields dt{color:var(--muted);font-size:.8rem}.peer-fields dd{margin:6px 0 0;overflow-wrap:anywhere}@media(max-width:720px){.peer-fields{grid-template-columns:1fr}}
 .reward-admin{padding:20px;margin-bottom:22px}.reward-admin pre{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--green);max-height:320px;overflow:auto}
+
