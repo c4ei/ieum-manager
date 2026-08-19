@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IEUM SNS 참여 보상</title>
+<meta name="description" content="IEUM 사용 후기를 SNS에 공유하고 계정당 1회 참여 보상을 신청합니다.">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="reward-page">
+<header><div><p class="eyebrow">IEUM PIONEER REWARD</p><h1>SNS 체험 후기 <span>참여 보상</span></h1><p class="lead">AAH 로그인 계정으로 IEUM 체험 후기를 등록하면 검증 후 0.01 IEUM 보상 대상이 됩니다.</p></div><a href="/">관제로 돌아가기</a></header>
+<p class="reward-notice">AAH 계정·지갑 주소·SNS 계정·게시물 URL은 각각 최초 1회만 참여할 수 있습니다. 거절된 신청도 다시 사용할 수 없습니다. 현재 승인은 지급 대상 확정이며, 합의 발행 기능이 활성화되기 전에는 자동 지급되지 않습니다.</p>
+<form id="sns-reward-form" class="panel reward-form">
+<label>IEUM 지갑 주소<input name="address" required pattern="0x[0-9a-fA-F]{40}" autocomplete="off" placeholder="0x..."></label>
+<label>SNS 플랫폼<select name="platform" required><option value="x">X</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="threads">Threads</option><option value="youtube">YouTube</option><option value="blog">Blog</option></select></label>
+<label>SNS 계정<input name="account" required minlength="2" maxlength="80" autocomplete="off" placeholder="@ieum_user"></label>
+<label>공개 게시물 HTTPS URL<input name="postUrl" type="url" required autocomplete="off" placeholder="https://..."></label>
+<button id="sns-submit">0.01 IEUM 참여 신청</button>
+<p id="sns-message">AAH 로그인이 필요합니다.</p>
+</form>
+<section><div class="section-title"><div><p class="eyebrow">MY CLAIMS</p><h2>내 신청 상태</h2></div><button id="sns-refresh" class="link">새로고침</button></div><div id="sns-status" class="reward-status"><p class="empty">신청 내역을 확인 중입니다.</p></div></section>
+</main>
+<script type="module" src="/rewards.js"></script>
+</body>
+</html>

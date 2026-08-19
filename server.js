@@ -43,10 +43,20 @@ function aahAdmin(req){try{const decoded=jwt.verify(decodeURIComponent(cookie(re
 function aahUser(req){try{return jwt.verify(decodeURIComponent(cookie(req,'token')),jwtSecret)||null;}catch{return null;}}
 function adminAuthorized(req){if(aahAdmin(req))return true;const ip=requestIp(req),now=Date.now(),entry=attempts.get(ip)||{count:0,blockedUntil:0};if(entry.blockedUntil>now)return false;const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');const ok=adminToken.length>=32&&secureEqual(supplied,adminToken);if(ok){attempts.delete(ip);return true;}entry.count++;if(entry.count>=5){entry.blockedUntil=now+15*60_000;entry.count=0;}attempts.set(ip,entry);return false;}
 async function readJson(req,max=16_384){let size=0,body='';for await(const chunk of req){size+=chunk.length;if(size>max)throw new Error('요청 본문이 너무 큽니다.');body+=chunk;}return body?JSON.parse(body):{};}
-async function verifySnsClaim(claim){
-  if(!snsVerifyUrl)return claim;
-  if(!snsVerifyUrl.startsWith('https://'))throw new Error('IEUM_SNS_VERIFY_URL은 HTTPS여야 합니다.');
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);try{const response=await fetch(snsVerifyUrl,{method:'POST',headers:{'content-type':'application/json',...(snsVerifyToken?{authorization:`Bearer ${snsVerifyToken}`}:{})},body:JSON.stringify({platform:claim.platform,account:claim.account,postUrl:claim.postUrl}),signal:controller.signal});if(!response.ok)throw new Error(`SNS 확인 서비스 HTTP ${response.status}`);const result=await response.json();if(result.verified!==true)return {...claim,verification:'platform-api-rejected',reviewerNote:String(result.reason||'자동 확인 실패').slice(0,300)};return {...claim,status:'approved',verification:'platform-api',platformAccountId:String(result.platformAccountId||'').slice(0,120)||null,postId:String(result.postId||'').slice(0,160)||null,reviewedAt:new Date().toISOString()};}finally{clearTimeout(timer);}
+export async function verifySnsClaim(claim,{verifyUrl=snsVerifyUrl,verifyToken=snsVerifyToken,fetchImpl=fetch}={}){
+  if(!verifyUrl)return claim;
+  if(!verifyUrl.startsWith('https://'))return {...claim,verification:'configuration-error',reviewerNote:'SNS 자동 확인 URL이 HTTPS가 아니어서 관리자 검토로 전환했습니다.'};
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
+  try{
+    const response=await fetchImpl(verifyUrl,{method:'POST',headers:{'content-type':'application/json',...(verifyToken?{authorization:`Bearer ${verifyToken}`}:{})},body:JSON.stringify({platform:claim.platform,account:claim.account,postUrl:claim.postUrl}),signal:controller.signal});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const result=await response.json();
+    if(result.verified!==true)return {...claim,verification:'platform-api-rejected',reviewerNote:String(result.reason||'자동 확인 실패').slice(0,300)};
+    return {...claim,status:'approved',verification:'platform-api',platformAccountId:String(result.platformAccountId||'').slice(0,120)||null,postId:String(result.postId||'').slice(0,160)||null,reviewedAt:new Date().toISOString()};
+  }catch(error){
+    const reason=error?.name==='AbortError'?'자동 확인 시간 초과':`자동 확인 장애: ${error?.message||'알 수 없는 오류'}`;
+    return {...claim,status:'pending',verification:'platform-api-unavailable',reviewerNote:reason.slice(0,300)};
+  }finally{clearTimeout(timer);}
 }
 function sameOrigin(req){const origin=req.headers.origin;if(!origin)return true;return origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`;}
 
@@ -191,6 +201,7 @@ async function rewardApi(req,res,url){
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
   const user=aahUser(req);if(!user)return json(res,401,{error:'AAH 로그인이 필요합니다.'});
   if(req.method==='POST'&&url.pathname==='/api/rewards/sns-claims'){
+    if(!String(req.headers['content-type']||'').startsWith('application/json'))return json(res,415,{error:'application/json만 허용합니다.'});
     const policy=await loadPolicy(),identity=String(user.email||user.username||user.sub);let claim=sanitizeSnsClaim(await readJson(req),{userId:identity,ip:requestIp(req)});assertSnsClaimUnique(claim,policy.snsClaims||[]);claim=await verifySnsClaim(claim);
     policy.snsClaims=[...(policy.snsClaims||[]),claim].slice(-10000);await savePolicy(policy);await audit({action:'sns-claim-submitted',ip:requestIp(req),claimId:claim.id,userId:identity,address:claim.address,platform:claim.platform});return json(res,201,{claim,notice:'계정당 1회 신청되었습니다. SNS API 자동 확인 또는 관리자 검토 후 승인되며 현재 합의 신규 발행은 비활성입니다.'});
   }
@@ -358,7 +369,7 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.19',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.20',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;

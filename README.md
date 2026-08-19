@@ -1,7 +1,7 @@
-# IEUM Manager 0.3.19
+# IEUM Manager 0.3.20
 
-보유 보상과 최초 참여 보상 이벤트 관리, 기간 중복 방지, Chain 설정 생성과 확정 지급
-조회는 [`docs/VERSION_0.3.19.md`](docs/VERSION_0.3.19.md)를 참고하세요.
+SNS 0.01 IEUM 최초 1회 신청, 자동검증 장애 시 관리자 대기열 보존과 사용자 신청 화면은
+[`docs/VERSION_0.3.20.md`](docs/VERSION_0.3.20.md)를 참고하세요.
 주소 : https://iem.aah.name
 WAF 반영
 
