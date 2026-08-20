@@ -1,0 +1,3 @@
+.ieum-amount{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px}
+.ieum-amount small{color:var(--muted);font:10px ui-monospace,monospace}
+.big-balance .ieum-amount small{font-size:11px}
