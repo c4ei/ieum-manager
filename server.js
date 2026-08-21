@@ -385,7 +385,7 @@ async function snapshot() {
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const health=diagnoseNodes(nodes,healthHistory,Date.now(),Math.max(10,Number(config.stuckDetectionSeconds)||20)*1000);healthHistory=health.next;
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.22',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,diagnostics:health.diagnostics,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'1.0.0.1',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,diagnostics:health.diagnostics,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
