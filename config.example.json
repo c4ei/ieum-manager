@@ -1,5 +1,6 @@
 {
   "refreshSeconds": 10,
+  "stuckDetectionSeconds": 20,
   "historyBlocks": 40,
   "validatorWindow": 1000,
   "validatorMinimumSamples": 20,
@@ -8,7 +9,7 @@
   "unitDecimals": 18,
   "unitSymbol": "IEUM",
   "expectedChainId": 21004,
-  "expectedGenesisHash": "0xc7a4f99b113341db7705117dedb240bb3ea3b0b99c115d134ddf505be1ff8a5a",
+  "expectedGenesisHash": "0x82cfc3615112766f3eb151a8677890c1b74ce6bce8463a1a3590991c383650f6",
   "indexQuorumPeers": 2,
   "nodes": [
     {"id":"node-1","name":"Main Node 1","rpcUrl":"http://host.docker.internal:8989"},

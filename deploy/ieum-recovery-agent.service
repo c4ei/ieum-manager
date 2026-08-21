@@ -1,0 +1,15 @@
+[Unit]
+Description=IEUM limited node recovery agent
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ieum-manager-recovery.env
+ExecStart=/opt/ieum-manager/deploy/ieum-recovery-agent.sh
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ieum-manager-control /var/log/ieum-recovery

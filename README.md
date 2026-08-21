@@ -1,7 +1,8 @@
-# IEUM Manager 0.3.21
+# IEUM Manager 0.3.22
 
 SNS 0.01 IEUM 최초 1회 신청, 자동검증 장애 시 관리자 대기열 보존과 사용자 신청 화면은
-[`docs/VERSION_0.3.21.md`](docs/VERSION_0.3.21.md)를 참고하세요.
+Chain Doctor와 제한된 4노드 복구 설치는
+[`docs/VERSION_0.3.22_CHAIN_DOCTOR.md`](docs/VERSION_0.3.22_CHAIN_DOCTOR.md)를 참고하세요.
 주소 : https://iem.aah.name
 WAF 반영
 
@@ -110,6 +111,12 @@ curl -s http://127.0.0.1:8787/api/snapshot
 - `ieum_blockProductionStatus`
 
 구형 노드가 섞여 있으면 기본 노드 관제는 유지되고 피어 자동 발견이 제한됩니다. 네 노드를 모두 v0.22.2로 올린 뒤 사용하세요.
+
+## Chain Doctor
+
+관리자 화면은 네 RPC의 운영망 신원, 버전, 높이, 피어와 mempool을 함께 비교합니다.
+위험 상태에서만 제한된 복구 요청을 만들 수 있으며 웹 컨테이너에는 Docker 소켓을
+연결하지 않습니다. 호스트 복구 에이전트 설치 전에는 진단만 사용할 수 있습니다.
 
 ## 다음 단계
 

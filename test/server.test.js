@@ -15,7 +15,7 @@ test('unit formatter rounds at 8 decimals without losing integer precision',()=>
 test('example config pins the IEUM mainnet genesis hash',async()=>{
   const config=JSON.parse(await readFile(new URL('../config.example.json',import.meta.url),'utf8'));
   assert.equal(config.expectedChainId,21004);
-  assert.equal(config.expectedGenesisHash,'0xc7a4f99b113341db7705117dedb240bb3ea3b0b99c115d134ddf505be1ff8a5a');
+  assert.equal(config.expectedGenesisHash,'0x82cfc3615112766f3eb151a8677890c1b74ce6bce8463a1a3590991c383650f6');
 });
 test('production summary excludes genesis and separates producers',()=>{
   const result=summarizeProduction([{height:1,timestamp:100,producer:'a'},{height:2,timestamp:103,producer:'b'}]);

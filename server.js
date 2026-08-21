@@ -1,13 +1,14 @@
 import http from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {query,dbReady,pool} from './lib/db.js';
 import {applyPolicy,audit,loadPolicy,recentAudit,savePolicy,wafDecision} from './lib/admin-policy.js';
 import {normalizePeer,peerSummary} from './lib/peers.js';
 import {assertNoOverlap,assertSnsClaimUnique,holderConfig,normalizeCampaign,sanitizePayout,sanitizeSnsClaim} from './lib/reward-campaigns.js';
+import {diagnoseNodes} from './lib/chain-health.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
@@ -17,10 +18,13 @@ const config = JSON.parse(await readFile(configPath, 'utf8'));
 const timeoutMs = Number(process.env.IEUM_RPC_TIMEOUT_MS || 4000);
 let rpcId = 0;
 let cache = { at: 0, data: null, pending: null };
+let healthHistory=new Map();
 const adminToken=process.env.IEUM_MANAGER_ADMIN_TOKEN||'';
 const jwtSecret=process.env.JWT_SECRET||'';
 const snsVerifyUrl=process.env.IEUM_SNS_VERIFY_URL||'';
 const snsVerifyToken=process.env.IEUM_SNS_VERIFY_TOKEN||'';
+const recoveryControlDir=process.env.IEUM_RECOVERY_CONTROL_DIR||'';
+const recoveryControlToken=process.env.IEUM_RECOVERY_CONTROL_TOKEN||'';
 const attempts=new Map();
 const requestBuckets=new Map();
 const FOUNDATION_WALLET='0x356456ff1216b57a6f8891b195b42d296789b67d';
@@ -64,7 +68,18 @@ async function adminApi(req,res,url){
   const ip=requestIp(req);if(!adminAuthorized(req)){await audit({action:'auth-failed',ip});return json(res,401,{error:'관리자 인증이 필요합니다.'});}
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
   if(req.method==='GET'&&url.pathname==='/api/admin/session'){const user=aahAdmin(req);return json(res,200,{authenticated:true,source:user?'aah-jwt':'emergency-token',user:user?{email:user.email,username:user.username}:null});}
-  if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),security:{activeAuthBlocks:[...attempts.values()].filter(entry=>entry.blockedUntil>Date.now()).length,trackedRateBuckets:requestBuckets.size},capabilities:{managerRpcPolicy:true,alertRefresh:true,wafAudit:true,p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),security:{activeAuthBlocks:[...attempts.values()].filter(entry=>entry.blockedUntil>Date.now()).length,trackedRateBuckets:requestBuckets.size},capabilities:{managerRpcPolicy:true,alertRefresh:true,wafAudit:true,chainDiagnostics:true,limitedRecovery:Boolean(recoveryControlDir&&recoveryControlToken),p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/chain-diagnostics'){
+    cache={at:0,data:null,pending:null};const data=await snapshot();return json(res,200,{diagnostics:data.diagnostics,recovery:{enabled:Boolean(recoveryControlDir&&recoveryControlToken),pendingLossWarning:'노드 재시작 시 확정되지 않은 mempool 거래가 사라질 수 있습니다.'}});
+  }
+  if(req.method==='POST'&&url.pathname==='/api/admin/chain-recovery'){
+    if(!recoveryControlDir||recoveryControlToken.length<32)return json(res,503,{error:'제한된 호스트 복구 에이전트가 설정되지 않았습니다.'});
+    const input=await readJson(req);if(input.confirmation!=='RESTART IEUM NODES')return json(res,400,{error:'확인 문구가 일치하지 않습니다.'});
+    cache={at:0,data:null,pending:null};const data=await snapshot();
+    if(data.diagnostics.status!=='critical')return json(res,409,{error:'현재 자동 진단이 위험 상태가 아니므로 재시작을 요청하지 않습니다.'});
+    if(data.diagnostics.pendingTotal>0&&input.acceptPendingLoss!==true)return json(res,409,{error:'대기 거래가 있습니다. 손실 가능성을 명시적으로 확인해야 합니다.',pending:data.diagnostics.pendingTotal});
+    await mkdir(recoveryControlDir,{recursive:true});const id=randomUUID(),request={id,action:'restart-ieum-nodes',requestedAt:new Date().toISOString(),requestedBy:aahAdmin(req)?.email||requestIp(req),token:recoveryControlToken,diagnostics:data.diagnostics};const temp=join(recoveryControlDir,`.${id}.tmp`),target=join(recoveryControlDir,`${id}.json`);await writeFile(temp,JSON.stringify(request,null,2),{mode:0o600});await rename(temp,target);await audit({action:'chain-recovery-requested',ip,id,pending:data.diagnostics.pendingTotal});return json(res,202,{queued:true,id,warning:data.diagnostics.pendingTotal>0?'대기 거래가 재시작으로 사라질 수 있습니다.':null});
+  }
   if(req.method==='GET'&&url.pathname==='/api/admin/events')return json(res,200,{items:await recentAudit(url.searchParams.get('limit'))});
   if(req.method==='GET'&&url.pathname==='/api/admin/reward-campaigns'){
     const policy=await loadPolicy();const primary=applyPolicy(config.nodes,policy).find(node=>!node.admin.blocked);let onchain=[];
@@ -368,8 +383,9 @@ async function snapshot() {
     const policy=await loadPolicy();const configured=applyPolicy(config.nodes,policy);const nodes=await Promise.all(configured.map(inspectNode));
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
+    const health=diagnoseNodes(nodes,healthHistory,Date.now(),Math.max(10,Number(config.stuckDetectionSeconds)||20)*1000);healthHistory=health.next;
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'0.3.21',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion:'0.3.22',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,diagnostics:health.diagnostics,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
