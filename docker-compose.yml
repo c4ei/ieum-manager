@@ -24,11 +24,14 @@ services:
       IEUM_MANAGER_ADMIN_TOKEN: ${IEUM_MANAGER_ADMIN_TOKEN:?IEUM_MANAGER_ADMIN_TOKEN을 .env에 설정하세요}
       JWT_SECRET: ${JWT_SECRET:?AAH와 동일한 JWT_SECRET을 .env에 설정하세요}
       IEUM_MANAGER_TRUST_PROXY: ${IEUM_MANAGER_TRUST_PROXY:-0}
+      IEUM_RECOVERY_CONTROL_DIR: /app/control
+      IEUM_RECOVERY_CONTROL_TOKEN: ${IEUM_RECOVERY_CONTROL_TOKEN:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-ieum}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ieum_exp}
     volumes:
       - ./config.json:/app/config.json:ro
       - ieum_manager_data:/app/data
       - ieum_manager_logs:/app/logs
+      - ${IEUM_RECOVERY_CONTROL_HOST_DIR:-./control}:/app/control
     ports: 
       - "8787:8787"
     extra_hosts: ["host.docker.internal:host-gateway"]

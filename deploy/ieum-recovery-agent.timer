@@ -1,0 +1,10 @@
+[Unit]
+Description=Check IEUM recovery requests every 15 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15s
+Unit=ieum-recovery-agent.service
+
+[Install]
+WantedBy=timers.target
