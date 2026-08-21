@@ -17,6 +17,11 @@ test('example config pins the IEUM mainnet genesis hash',async()=>{
   assert.equal(config.expectedChainId,21004);
   assert.equal(config.expectedGenesisHash,'0x82cfc3615112766f3eb151a8677890c1b74ce6bce8463a1a3590991c383650f6');
 });
+test('indexer fallback pins the same IEUM mainnet genesis hash',async()=>{
+  const source=await readFile(new URL('../indexer.js',import.meta.url),'utf8');
+  assert.match(source,/0x82cfc3615112766f3eb151a8677890c1b74ce6bce8463a1a3590991c383650f6/);
+  assert.doesNotMatch(source,/0x497e04ac4faec01b78b57d3caef7951fca98b1928a1af558ea03a663aa622418/);
+});
 test('production summary excludes genesis and separates producers',()=>{
   const result=summarizeProduction([{height:1,timestamp:100,producer:'a'},{height:2,timestamp:103,producer:'b'}]);
   assert.equal(result.averageBlockTimeSeconds,3);assert.equal(result.intervalSamples,1);assert.deepEqual(result.producerBlocks,{a:1,b:1});assert.equal(result.genesisExcluded,true);

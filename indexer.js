@@ -4,6 +4,7 @@ import {pool,query} from './lib/db.js';
 import {rpc,hexToBigInt,toNumber} from './lib/rpc.js';
 import {selectIndexingQuorum} from './lib/quorum.js';
 import {applyPolicy,loadPolicy} from './lib/admin-policy.js';
+import {actualTransactionFee} from './lib/transaction-fee.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const config = JSON.parse(await readFile(process.env.IEUM_MANAGER_CONFIG || join(root,'config.json'),'utf8'));
@@ -23,7 +24,7 @@ async function indexingQuorum() {
     } catch (error) { return {node,online:false,error:error.message}; }
   }));
   const expectedChainId=Number(config.expectedChainId ?? 21004);
-  const expectedGenesis=String(config.expectedGenesisHash || '0x497e04ac4faec01b78b57d3caef7951fca98b1928a1af558ea03a663aa622418').toLowerCase();
+  const expectedGenesis=String(config.expectedGenesisHash || '0x82cfc3615112766f3eb151a8677890c1b74ce6bce8463a1a3590991c383650f6').toLowerCase();
   const eligible=observations.filter(item=>!item.online || (item.identity.chainId===expectedChainId && (!expectedGenesis || item.identity.genesisHash?.toLowerCase()===expectedGenesis)));
   return selectIndexingQuorum(eligible,Math.max(2,Number(config.indexQuorumPeers)||2));
 }
@@ -45,9 +46,12 @@ async function indexBlock(url, height) {
       producer=EXCLUDED.producer,timestamp=EXCLUDED.timestamp,tx_count=EXCLUDED.tx_count,size_bytes=EXCLUDED.size_bytes,raw=EXCLUDED.raw,indexed_at=now()`,
       [height,block.hash,block.parentHash,block.miner,toNumber(block.timestamp),block.transactions.length,toNumber(block.size||'0x0'),block]);
     for (const [i,tx] of block.transactions.entries()) {
+      const receipt=(await rpc(url,'eth_getTransactionReceipt',[tx.hash],10000)).result;
+      if (!receipt) throw new Error(`transaction receipt ${tx.hash} not found`);
+      const fee=actualTransactionFee(tx,receipt);
       await client.query(`INSERT INTO transactions(hash,block_height,tx_index,sender,recipient,value,fee,nonce,raw)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(hash) DO NOTHING`,
-        [tx.hash,height,i,tx.from,tx.to,hexToBigInt(tx.value||'0x0').toString(),hexToBigInt(tx.gasPrice||'0x0').toString(),toNumber(tx.nonce||'0x0'),tx]);
+        [tx.hash,height,i,tx.from,tx.to,hexToBigInt(tx.value||'0x0').toString(),fee.toString(),toNumber(tx.nonce||'0x0'),{...tx,receipt}]);
       for (const address of [tx.from,tx.to]) await client.query(`INSERT INTO address_balances(address,balance,tx_count,first_seen_height,last_seen_height)
         VALUES($1,0,1,$2,$2) ON CONFLICT(address) DO UPDATE SET tx_count=address_balances.tx_count+1,last_seen_height=$2`,[address,height]);
     }
@@ -64,6 +68,16 @@ async function refreshBalances(url) {
       ON CONFLICT(address) DO UPDATE SET balance=EXCLUDED.balance,locked=EXCLUDED.locked,updated_at=now()`,[item.address,String(item.balance),Boolean(item.locked)]);
     offset += (page.accounts||[]).length;
     if (!page.accounts?.length || offset>=Number(page.total)) break;
+  }
+}
+
+async function repairLegacyTransactionFees(url) {
+  const rows=await query("SELECT hash,raw FROM transactions WHERE NOT (raw ? 'receipt') ORDER BY block_height,tx_index LIMIT 200");
+  for(const row of rows.rows){
+    const receipt=(await rpc(url,'eth_getTransactionReceipt',[row.hash],10000)).result;
+    if(!receipt)continue;
+    const fee=actualTransactionFee(row.raw,receipt);
+    await query('UPDATE transactions SET fee=$2,raw=$3 WHERE hash=$1',[row.hash,fee.toString(),{...row.raw,receipt}]);
   }
 }
 
@@ -113,6 +127,7 @@ async function cycle() {
   const state=await query("SELECT value FROM explorer_state WHERE key='last_height'");
   let next=state.rows.length?Number(state.rows[0].value)+1:0;
   while (next<=tip && !stopping) { await indexBlock(url,next++); }
+  await repairLegacyTransactionFees(url);
   await refreshBalances(url);
 }
 

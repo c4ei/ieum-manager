@@ -6,6 +6,7 @@ test('IEUM formatter trims trailing zeroes and rounds to eight decimals',()=>{
   assert.equal(formatIeum('1120000000000000000'),'1.12');
   assert.equal(formatIeum('1234567895000000000'),'1.2345679');
   assert.equal(formatIeum('99999999996000000000'),'100');
+  assert.equal(formatIeum('21070100000000000000000000'),'21,070,100');
 });
 
 test('whole IEUM hides wei while fractional IEUM preserves exact wei',()=>{
