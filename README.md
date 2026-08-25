@@ -1,4 +1,4 @@
-# IEUM Manager 1.0.0.1
+# IEUM Manager 1.0.0.2
 
 SNS 0.01 IEUM 최초 1회 신청, 자동검증 장애 시 관리자 대기열 보존과 사용자 신청 화면은
 Chain Doctor와 제한된 4노드 복구 설치는

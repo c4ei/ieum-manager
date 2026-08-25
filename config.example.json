@@ -5,6 +5,8 @@
   "validatorWindow": 1000,
   "validatorMinimumSamples": 20,
   "productionWindow": 100,
+  "eventDrivenBlocks": true,
+  "targetBlockSeconds": 3,
   "accountLimit": 100,
   "unitDecimals": 18,
   "unitSymbol": "IEUM",

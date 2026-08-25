@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
 process.env.IEUM_MANAGER_CONFIG=new URL('../config.example.json',import.meta.url).pathname;
 process.env.IEUM_MANAGER_PORT='0';
-const {hexToBigInt,formatUnits,summarizeProduction,normalizeExplorerTerm,verifySnsClaim}=await import('../server.js');
+const {hexToBigInt,formatUnits,summarizeProduction,normalizeExplorerTerm,verifySnsClaim,managerVersion}=await import('../server.js');
+test('manager display version comes from package metadata',()=>assert.equal(managerVersion,'1.0.0.2'));
 test('explorer accepts hashes with or without 0x',()=>{const hash='cf91fb3db2bac80635129cb54a9f6eaecefca2e100853000033eceb424de3574';assert.equal(normalizeExplorerTerm(hash),`0x${hash}`);assert.equal(normalizeExplorerTerm(`0x${hash}`),`0x${hash}`);});
 test('hex quantity parser',()=>assert.equal(hexToBigInt('0x2a'),42n));
 test('unit formatter',()=>assert.equal(formatUnits(1234500000000000000n,18),'1.2345'));
@@ -25,6 +26,10 @@ test('indexer fallback pins the same IEUM mainnet genesis hash',async()=>{
 test('production summary excludes genesis and separates producers',()=>{
   const result=summarizeProduction([{height:1,timestamp:100,producer:'a'},{height:2,timestamp:103,producer:'b'}]);
   assert.equal(result.averageBlockTimeSeconds,3);assert.equal(result.intervalSamples,1);assert.deepEqual(result.producerBlocks,{a:1,b:1});assert.equal(result.genesisExcluded,true);
+});
+test('event-driven production does not report imaginary missed slots',()=>{
+  const result=summarizeProduction([{height:1,timestamp:100,producer:'a'},{height:2,timestamp:10000,producer:'b'}]);
+  assert.equal(result.eventDriven,true);assert.equal(result.estimatedMissedSlots,null);
 });
 test('guild payment compatibility stores the canonical indexed transaction hash',async()=>{
   const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
