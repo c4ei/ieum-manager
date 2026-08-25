@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {rea
 process.env.IEUM_MANAGER_CONFIG=new URL('../config.example.json',import.meta.url).pathname;
 process.env.IEUM_MANAGER_PORT='0';
 const {hexToBigInt,formatUnits,summarizeProduction,normalizeExplorerTerm,verifySnsClaim,managerVersion}=await import('../server.js');
-test('manager display version comes from package metadata',()=>assert.equal(managerVersion,'1.0.0.2'));
+test('manager display version comes from package metadata',()=>assert.equal(managerVersion,'1.0.0.3'));
 test('explorer accepts hashes with or without 0x',()=>{const hash='cf91fb3db2bac80635129cb54a9f6eaecefca2e100853000033eceb424de3574';assert.equal(normalizeExplorerTerm(hash),`0x${hash}`);assert.equal(normalizeExplorerTerm(`0x${hash}`),`0x${hash}`);});
 test('hex quantity parser',()=>assert.equal(hexToBigInt('0x2a'),42n));
 test('unit formatter',()=>assert.equal(formatUnits(1234500000000000000n,18),'1.2345'));
