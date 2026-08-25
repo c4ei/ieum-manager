@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -15,6 +15,8 @@ const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
 const port = Number(process.env.IEUM_MANAGER_PORT || 8787);
 const configPath = process.env.IEUM_MANAGER_CONFIG || join(root, 'config.json');
 const config = JSON.parse(await readFile(configPath, 'utf8'));
+const packageInfo = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+export const managerVersion = String(packageInfo.version).replace(/-(\d+)$/, '.$1');
 const timeoutMs = Number(process.env.IEUM_RPC_TIMEOUT_MS || 4000);
 let rpcId = 0;
 let cache = { at: 0, data: null, pending: null };
@@ -30,6 +32,7 @@ const requestBuckets=new Map();
 const FOUNDATION_WALLET='0x356456ff1216b57a6f8891b195b42d296789b67d';
 const GUILD_PRICE_WEI=1_000_000_000_000_000_000n;
 const GUILD_CAPACITY=[0,20,40,60,80,100];
+const IEUM_BANK={bank:'카카오뱅크',account:'3333-27-5746222',holder:'씨포이아이(C4EI)',rate:'1 AAH = 1 IEUM'};
 
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));};
 const limitOf=(url,fallback=25,max=100)=>Math.min(Math.max(Number(url.searchParams.get('limit'))||fallback,1),max);
@@ -69,6 +72,18 @@ async function adminApi(req,res,url){
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
   if(req.method==='GET'&&url.pathname==='/api/admin/session'){const user=aahAdmin(req);return json(res,200,{authenticated:true,source:user?'aah-jwt':'emergency-token',user:user?{email:user.email,username:user.username}:null});}
   if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),security:{activeAuthBlocks:[...attempts.values()].filter(entry=>entry.blockedUntil>Date.now()).length,trackedRateBuckets:requestBuckets.size},capabilities:{managerRpcPolicy:true,alertRefresh:true,wafAudit:true,chainDiagnostics:true,limitedRecovery:Boolean(recoveryControlDir&&recoveryControlToken),p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/purchases'){
+    if(!await dbReady())return json(res,503,{error:'데이터베이스 연결 대기 중'});
+    const rows=await query('SELECT id,user_id,wallet_address,amount_aah,amount_ieum,deposit_code,status,deposit_confirmed_at,payout_tx_hash,created_at,updated_at FROM ieum_purchase_orders ORDER BY created_at DESC LIMIT 500');
+    return json(res,200,{items:rows.rows,bank:IEUM_BANK,automaticBankVerification:false});
+  }
+  const purchaseReview=url.pathname.match(/^\/api\/admin\/purchases\/(\d+)$/);
+  if(req.method==='PUT'&&purchaseReview){
+    const input=await readJson(req),status=['deposit-confirmed','paid','rejected'].includes(input.status)?input.status:null;if(!status)return json(res,400,{error:'허용되지 않은 주문 상태입니다.'});
+    const txHash=String(input.payoutTxHash||'').trim();if(status==='paid'&&!validHash(txHash))return json(res,400,{error:'지급 거래 해시를 입력하세요.'});
+    const rows=await query("UPDATE ieum_purchase_orders SET status=$1,deposit_confirmed_at=CASE WHEN $1 IN ('deposit-confirmed','paid') THEN coalesce(deposit_confirmed_at,now()) ELSE deposit_confirmed_at END,payout_tx_hash=CASE WHEN $1='paid' THEN $2 ELSE payout_tx_hash END,updated_at=now() WHERE id=$3 RETURNING *",[status,txHash||null,Number(purchaseReview[1])]);
+    return rows.rows[0]?json(res,200,{order:rows.rows[0]}):json(res,404,{error:'주문을 찾을 수 없습니다.'});
+  }
   if(req.method==='GET'&&url.pathname==='/api/admin/chain-diagnostics'){
     cache={at:0,data:null,pending:null};const data=await snapshot();return json(res,200,{diagnostics:data.diagnostics,recovery:{enabled:Boolean(recoveryControlDir&&recoveryControlToken),pendingLossWarning:'노드 재시작 시 확정되지 않은 mempool 거래가 사라질 수 있습니다.'}});
   }
@@ -135,6 +150,27 @@ async function adminApi(req,res,url){
   }
   if(req.method==='POST'&&url.pathname==='/api/admin/refresh'){cache={at:0,data:null,pending:null};await audit({action:'snapshot-refresh',ip});return json(res,200,{ok:true});}
   return json(res,404,{error:'관리 API를 찾을 수 없습니다.'});
+}
+
+async function purchaseApi(req,res,url){
+  const user=aahUser(req);if(!user)return json(res,401,{error:'AAH 로그인이 필요합니다.'});
+  if(!await dbReady())return json(res,503,{error:'데이터베이스 연결 대기 중'});
+  const userId=String(user.id||user.userId||user.email||user.username||'').slice(0,200);if(!userId)return json(res,401,{error:'AAH 사용자 식별값을 확인할 수 없습니다.'});
+  if(req.method==='GET'){
+    const rows=await query('SELECT id,wallet_address,amount_aah,amount_ieum,deposit_code,status,deposit_confirmed_at,payout_tx_hash,created_at,updated_at FROM ieum_purchase_orders WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50',[userId]);
+    return json(res,200,{items:rows.rows,bank:IEUM_BANK,automaticBankVerification:false});
+  }
+  if(req.method==='POST'){
+    if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
+    if(!String(req.headers['content-type']||'').startsWith('application/json'))return json(res,415,{error:'application/json만 허용합니다.'});
+    const input=await readJson(req),wallet=String(input.walletAddress||'').trim().toLowerCase(),amount=Number(input.amount);
+    if(!validAddress(wallet))return json(res,400,{error:'올바른 IEUM 받기 주소를 입력하세요.'});
+    if(!Number.isSafeInteger(amount)||amount<1||amount>1_000_000)return json(res,400,{error:'구매 수량은 1~1,000,000 AAH의 정수로 입력하세요.'});
+    let code,created;for(let attempt=0;attempt<10&&!created;attempt++){code=String(randomInt(10_000_000,100_000_000));try{created=(await query("INSERT INTO ieum_purchase_orders(user_id,wallet_address,amount_aah,amount_ieum,deposit_code) VALUES($1,$2,$3,$3,$4) RETURNING id,wallet_address,amount_aah,amount_ieum,deposit_code,status,created_at",[userId,wallet,amount,code])).rows[0];}catch(error){if(error?.code!=='23505')throw error;}}
+    if(!created)return json(res,503,{error:'입금 확인코드를 만들지 못했습니다. 다시 시도하세요.'});
+    return json(res,201,{order:created,bank:IEUM_BANK,instruction:`입금자명에 ${code} 숫자만 입력하세요.`,automaticBankVerification:false});
+  }
+  return json(res,405,{error:'허용되지 않은 HTTP 메서드입니다.'});
 }
 
 async function explorerApi(req,res,url){
@@ -326,12 +362,12 @@ export async function inspectProduction(primary){
   const heights=Array.from({length:count},(_,index)=>tip-index).filter(height=>height>0);
   const blocks=(await Promise.all(heights.map(async height=>{try{return (await rpc(primary.rpcUrl,'eth_getBlockByNumber',[`0x${height.toString(16)}`,false])).result;}catch{return null;}}))).filter(Boolean)
     .map(block=>({height:quantity(block.number),timestamp:quantity(block.timestamp),producer:block.miner||block.producer||'unknown'})).sort((a,b)=>a.height-b.height);
-  return summarizeProduction(blocks);
+  return summarizeProduction(blocks,{eventDriven:config.eventDrivenBlocks!==false,targetSeconds:Number(config.targetBlockSeconds)||3});
 }
-export function summarizeProduction(blocks){
-  const intervals=blocks.slice(1).map((block,index)=>Math.max(0,block.timestamp-blocks[index].timestamp));const target=3;
+export function summarizeProduction(blocks,{eventDriven=true,targetSeconds=3}={}){
+  const intervals=blocks.slice(1).map((block,index)=>Math.max(0,block.timestamp-blocks[index].timestamp));
   const producerBlocks={};for(const block of blocks)producerBlocks[block.producer]=(producerBlocks[block.producer]||0)+1;
-  return {sampleBlocks:blocks.length,intervalSamples:intervals.length,averageBlockTimeSeconds:intervals.length?intervals.reduce((sum,value)=>sum+value,0)/intervals.length:null,estimatedMissedSlots:intervals.reduce((sum,value)=>sum+Math.max(0,Math.floor(value/target)-1),0),producerBlocks,genesisExcluded:true};
+  return {sampleBlocks:blocks.length,intervalSamples:intervals.length,averageBlockTimeSeconds:intervals.length?intervals.reduce((sum,value)=>sum+value,0)/intervals.length:null,estimatedMissedSlots:eventDriven?null:intervals.reduce((sum,value)=>sum+Math.max(0,Math.floor(value/Math.max(1,targetSeconds))-1),0),producerBlocks,genesisExcluded:true,eventDriven};
 }
 
 async function recentFlow(primary, tip) {
@@ -356,6 +392,8 @@ function buildAlerts(nodes, chain) {
     online.filter(n=>max-n.status.height>2).forEach(n=>alerts.push({level:'warning',message:`${n.name} 블록 높이가 ${max-n.status.height} 뒤처짐`}));
     const identities=new Set(online.map(n=>`${n.identity.chainId}:${n.identity.genesisHash}`));
     if (identities.size>1) alerts.push({level:'critical',message:'노드 간 chainId 또는 genesisHash 불일치'});
+    const versions=new Set(online.map(n=>n.status?.version).filter(Boolean));
+    if (versions.size>1) alerts.push({level:'critical',message:`노드 간 Chain 버전 불일치: ${[...versions].join(' / ')}`});
     online.filter(n=>n.status.syncing).forEach(n=>alerts.push({level:'warning',message:`${n.name} 동기화 진행 중`}));
     online.filter(n=>n.status.peers<1).forEach(n=>alerts.push({level:'warning',message:`${n.name} 연결 피어 없음`}));
     online.forEach(n=>{
@@ -370,7 +408,7 @@ function buildAlerts(nodes, chain) {
       .forEach(v=>alerts.push({level:'info',message:`검증자 ${v.id} 서명률 표본 부족 (${v.eligibleBlocks}/${minimum} 블록)`}));
     (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>=minimum && v.signingRatePercent<95)
       .forEach(v=>alerts.push({level:v.signingRatePercent<80?'critical':'warning',message:`검증자 ${v.id} 서명률 ${v.signingRatePercent.toFixed(2)}%`}));
-    if (chain.production?.intervalSamples>0 && chain.production.averageBlockTimeSeconds>6) alerts.push({level:'warning',message:`평균 블록 생성 시간이 ${chain.production.averageBlockTimeSeconds.toFixed(2)}초입니다.`});
+    if (!chain.production?.eventDriven && chain.production?.intervalSamples>0 && chain.production.averageBlockTimeSeconds>6) alerts.push({level:'warning',message:`평균 블록 생성 시간이 ${chain.production.averageBlockTimeSeconds.toFixed(2)}초입니다.`});
   }
   return alerts;
 }
@@ -384,8 +422,9 @@ async function snapshot() {
     const primary=nodes.find(n=>n.online&&!n.admin.blocked); const tip=primary?.status?.height;
     const [wallets,transactions,chain]=await Promise.all([inspectWallets(primary),recentFlow(primary,tip),inspectChain(primary)]);
     const health=diagnoseNodes(nodes,healthHistory,Date.now(),Math.max(10,Number(config.stuckDetectionSeconds)||20)*1000);healthHistory=health.next;
+    const chainVersions=[...new Set(nodes.filter(n=>n.online).map(n=>n.status?.version).filter(Boolean))];
     const data={generatedAt:new Date().toISOString(),symbol:config.unitSymbol||'IEUM',decimals:config.unitDecimals??18,
-      managerVersion:'1.0.0.1',chainVersion:primary?.status?.version??null,nodes,wallets,transactions,chain,diagnostics:health.diagnostics,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
+      managerVersion,chainVersion:chainVersions.length===1?chainVersions[0]:null,chainVersions,nodes,wallets,transactions,chain,diagnostics:health.diagnostics,alerts:buildAlerts(nodes,chain),summary:{onlineNodes:nodes.filter(n=>n.online).length,totalNodes:nodes.length,
       height:tip??null,chainId:primary?.identity?.chainId??null,peers:nodes.reduce((s,n)=>s+(n.status?.peers||0),0),
       pending:nodes.reduce((s,n)=>s+(n.txpool?.pending||0),0)}};
     cache={at:Date.now(),data,pending:null}; return data;
@@ -408,6 +447,7 @@ export const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/session')return json(res,200,{admin:Boolean(aahAdmin(req))});
   if(url.pathname.startsWith('/api/guilds')){try{return await guildApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
   if(url.pathname.startsWith('/api/rewards/')){try{return await rewardApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
+  if(url.pathname==='/api/purchases'){try{return await purchaseApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
   if(!['GET','HEAD'].includes(req.method))return json(res,405,{error:'허용되지 않은 HTTP 메서드입니다.'});
   if(req.url==='/api/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true}));}
   if(req.url.startsWith('/api/explorer/')){try{return await explorerApi(req,res,new URL(req.url,'http://localhost'));}catch(error){return json(res,500,{error:error.message});}}

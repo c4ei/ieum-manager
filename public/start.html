@@ -1,6 +1,28 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IEUM 시작하기 | 지갑 다운로드·코인 구매·노드 실행</title><meta name="description" content="처음 사용하는 사람을 위한 IEUM Wallet 다운로드, 1 AAH로 1 IEUM 구매, IEUM Chain 노드 실행 안내입니다."><link rel="canonical" href="https://iem.aah.name/start.html"><meta property="og:title" content="IEUM 시작하기"><meta property="og:description" content="지갑 설치부터 IEUM 구매와 노드 실행까지"><meta property="og:type" content="website"><meta property="og:url" content="https://iem.aah.name/start.html"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/start.css"></head><body class="start-page"><main class="start-main">
-<a class="back" href="/">← 블록 익스플로러</a><header class="start-hero"><div><p class="eyebrow">IEUM QUICK START</p><h1>처음이어도 괜찮아요.<br><span>세 단계면 시작됩니다.</span></h1><p class="lead">지갑을 만들고 IEUM을 받은 뒤, 원하면 네트워크 노드에도 참여할 수 있습니다.</p></div></header>
-<section class="start-steps"><article class="start-card"><span>STEP 1</span><h2>IEUM Wallet 설치</h2><p>공식 GitHub Releases에서 운영체제에 맞는 최신 지갑을 내려받습니다. 복구 문구와 개인키는 누구에게도 보내지 마세요.</p><a class="primary" href="https://github.com/c4ei/ieum-wallet/releases" rel="noopener noreferrer">공식 Wallet 다운로드</a><a href="https://github.com/c4ei/ieum-wallet" rel="noopener noreferrer">Wallet 소스 보기</a></article>
-<article class="start-card"><span>STEP 2</span><h2>AAH로 IEUM 구매</h2><p>AAH 회원은 1 AAH = 1 IEUM 비율로 신청할 수 있습니다. 최소 1 AAH이며 관리자 확인 후 지갑으로 지급됩니다.</p><a class="primary" href="https://aah.name/ieum/buy" rel="noopener noreferrer">AAH에서 IEUM 구매</a><small>Wallet의 받기 주소를 다시 확인하세요. 잘못 입력한 주소는 복구하기 어렵습니다.</small></article>
-<article class="start-card"><span>STEP 3 · 선택</span><h2>Chain 노드 실행</h2><p>일반 노드는 데이터를 검증·전파합니다. PoS 체인이므로 CPU 작업증명 채굴이 아니며 검증자 참여에는 별도 승인과 키 보안이 필요합니다.</p><a class="primary" href="https://github.com/c4ei/ieum-chain" rel="noopener noreferrer">Chain 설치 문서</a><a href="https://github.com/c4ei/ieum-manager" rel="noopener noreferrer">Manager 소스 보기</a></article></section>
-<section class="start-safety"><h2>꼭 지켜주세요</h2><ul><li>공식 GitHub와 <code>aah.name</code> 외의 다운로드·구매 링크를 사용하지 않습니다.</li><li>복구 문구, 개인키, 비밀번호를 웹페이지나 상담 메시지에 입력하지 않습니다.</li><li>처음에는 소량으로 주소와 입금 결과를 확인합니다.</li><li>모바일은 Wallet부터 시작하고 노드는 안정적인 전원·네트워크에서 운영합니다.</li></ul></section><footer><b>IEUM Manager v0.3.7</b><span>Chain v0.22.5+ · Wallet v0.0.10.12+</span></footer></main><script src="/i18n.js"></script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>IEUM 시작하기 | 지갑·구매·PoS 참여</title>
+  <meta name="description" content="IEUM Wallet 설치, 1 AAH = 1 IEUM 구매 안내, 일반 노드와 PoS 검증자 참여 방법입니다.">
+  <link rel="canonical" href="https://iem.aah.name/start.html">
+  <meta property="og:title" content="IEUM 시작하기"><meta property="og:description" content="지갑 설치부터 IEUM 구매와 PoS 참여까지"><meta property="og:type" content="website"><meta property="og:url" content="https://iem.aah.name/start.html">
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/start.css">
+</head>
+<body class="start-page"><main class="start-main">
+  <a class="back" href="/">← 블록 익스플로러</a>
+  <header class="start-hero"><div><p class="eyebrow">IEUM QUICK START</p><h1>처음이어도 괜찮아요.<br><span>지갑부터 PoS까지 안내합니다.</span></h1><p class="lead">IEUM을 받고 보내는 것부터 네트워크 참여까지, 필요한 단계만 선택하세요.</p><p class="live-versions"><span id="manager-version">Manager 확인 중</span><span id="chain-version">Chain 확인 중</span></p></div></header>
+  <section class="start-steps" aria-label="IEUM 시작 단계">
+    <article class="start-card"><span>STEP 1</span><h2>IEUM Wallet 설치</h2><p>공식 GitHub Releases에서 운영체제에 맞는 최신 지갑을 내려받습니다. 먼저 받기 주소를 확인하고 소액으로 시험하세요.</p><a class="primary" href="https://github.com/c4ei/ieum-wallet/releases" rel="noopener noreferrer">공식 Wallet 다운로드</a><a href="https://github.com/c4ei/ieum-wallet" rel="noopener noreferrer">Wallet 소스 보기</a></article>
+    <article class="start-card"><span>STEP 2</span><h2>AAH로 IEUM 구매</h2><p><b>초기 기준 가격은 1 AAH = 1 IEUM</b>입니다. AAH 로그인 후 IEUM 받기 주소와 수량을 확인하여 신청합니다.</p><a class="primary" href="/buy.html">입금·구매 신청</a><a href="https://cex.aah.name" rel="noopener noreferrer">AAH CEX 확인</a><small>Manager는 개인키를 받지 않습니다. 주문마다 발급된 숫자를 입금자명에 입력하여 관리자 확인과 매칭합니다.</small></article>
+    <article class="start-card"><span>STEP 3 · 선택</span><h2>일반 노드 실행</h2><p>일반 노드는 체인 데이터를 검증하고 전파합니다. CPU로 문제를 푸는 채굴이 아니며, 일반 노드 실행만으로 검증자 이자가 자동 지급되지는 않습니다.</p><a class="primary" href="https://github.com/c4ei/ieum-chain" rel="noopener noreferrer">Chain 설치 문서</a><a href="/nodes">현재 노드 상태 보기</a></article>
+  </section>
+  <section class="pos-guide" aria-labelledby="pos-title">
+    <div><p class="eyebrow">PROOF OF STAKE</p><h2 id="pos-title">PoS 검증자 참여는 이렇게 달라요</h2><p>현재 운영망은 등록된 검증자 집합이 합의에 참여합니다. 코인을 보유하거나 일반 노드를 켜는 것만으로 자동 등록되는 구조가 아닙니다.</p></div>
+    <ol><li><b>지갑과 잔액 준비</b><span>검증자 보상 주소와 최소 잔액 조건을 준비합니다.</span></li><li><b>서버 노드 운영</b><span>항상 켜진 서버에서 영구 P2P 키와 원장을 안전하게 보관합니다.</span></li><li><b>검증자 공개키 제출</b><span>개인키가 아닌 consensus 공개키만 운영 관리자에게 전달합니다.</span></li><li><b>검증자 집합 등록</b><span>운영망 설정에 등록되고 활성화된 뒤에만 제안·투표와 보상에 참여합니다.</span></li></ol>
+    <div class="pos-warning"><b>절대 공유하지 마세요</b><span>복구 문구, 지갑 개인키, <code>consensus_signing.key</code> 또는 <code>validator.key</code> 내용</span></div>
+    <div class="start-actions"><a class="primary" href="https://github.com/c4ei/ieum-chain" rel="noopener noreferrer">노드 설치·검증자 문서</a><a href="/validators">검증자 현황 보기</a></div>
+  </section>
+  <section class="start-safety"><h2>구매 전에 꼭 확인하세요</h2><ul><li>고정 1:1 비율은 초기 운영 정책이며 향후 시장 거래가 시작되면 변경될 수 있습니다.</li><li>주문 화면에서 AAH 차감액, 받을 IEUM, 수수료, 받기 주소를 최종 확인해야 합니다.</li><li>Manager와 상담 메시지에는 복구 문구·개인키·비밀번호를 입력하지 않습니다.</li><li>처음에는 소액으로 주소와 입금 결과를 확인합니다.</li></ul></section>
+  <footer><b id="footer-manager-version">IEUM Manager 확인 중</b><span id="footer-chain-version">IEUM Chain 확인 중</span></footer>
+</main><script src="/i18n.js"></script><script type="module" src="/start.js"></script></body>
+</html>
