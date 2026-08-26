@@ -30,6 +30,9 @@ jobs:
           POSTGRES_PASSWORD: ci-only-placeholder
           IEUM_MANAGER_ADMIN_TOKEN: ci-only-placeholder-32-characters-minimum
           JWT_SECRET: ci-only-jwt-secret-not-for-production
+          IEUM_VOUCHER_PRIVATE_KEY: ci-only-private-key-placeholder
+          IEUM_VOUCHER_RPC_URL: http://127.0.0.1:8989
+          IEUM_VOUCHER_CODE_PEPPER: ci-only-voucher-pepper-32-characters-minimum
         run: docker compose config
       - name: Build application images without starting PostgreSQL
         env:
