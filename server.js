@@ -1,6 +1,8 @@
 import http from 'node:http';
 import { randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import jwt from 'jsonwebtoken';
+import QRCode from 'qrcode';
+import {JsonRpcProvider,Wallet} from 'ethers';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,6 +11,7 @@ import {applyPolicy,audit,loadPolicy,recentAudit,savePolicy,wafDecision} from '.
 import {normalizePeer,peerSummary} from './lib/peers.js';
 import {assertNoOverlap,assertSnsClaimUnique,holderConfig,normalizeCampaign,sanitizePayout,sanitizeSnsClaim} from './lib/reward-campaigns.js';
 import {diagnoseNodes} from './lib/chain-health.js';
+import {createVoucherSecrets,formatVoucherAmount,parseVoucherAmount,validVoucherAddress,voucherCodeMatches,voucherDigest} from './lib/vouchers.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
@@ -33,6 +36,12 @@ const FOUNDATION_WALLET='0x356456ff1216b57a6f8891b195b42d296789b67d';
 const GUILD_PRICE_WEI=1_000_000_000_000_000_000n;
 const GUILD_CAPACITY=[0,20,40,60,80,100];
 const IEUM_BANK={bank:'카카오뱅크',account:'3333-27-5746222',holder:'씨포이아이(C4EI)',rate:'1 AAH = 1 IEUM'};
+const voucherPepper=process.env.IEUM_VOUCHER_CODE_PEPPER||'';
+const voucherPublicUrl=(process.env.IEUM_VOUCHER_PUBLIC_URL||'https://iem.aah.name').replace(/\/$/,'');
+const voucherRpcUrl=process.env.IEUM_VOUCHER_RPC_URL||config.nodes?.[0]?.rpcUrl||'';
+const voucherExplorerUrl=process.env.IEUM_VOUCHER_EXPLORER_URL||`${voucherPublicUrl}/tx/`;
+const voucherPrivateKey=process.env.IEUM_VOUCHER_PRIVATE_KEY||'';
+let voucherPayout=Promise.resolve();
 
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));};
 const limitOf=(url,fallback=25,max=100)=>Math.min(Math.max(Number(url.searchParams.get('limit'))||fallback,1),max);
@@ -73,6 +82,19 @@ async function adminApi(req,res,url){
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
   if(req.method==='GET'&&url.pathname==='/api/admin/session'){const user=aahAdmin(req);return json(res,200,{authenticated:true,source:user?'aah-jwt':'emergency-token',user:user?{email:user.email,username:user.username}:null});}
   if(req.method==='GET'&&url.pathname==='/api/admin/status'){const policy=await loadPolicy();return json(res,200,{policy,nodes:applyPolicy(config.nodes,policy),security:{activeAuthBlocks:[...attempts.values()].filter(entry=>entry.blockedUntil>Date.now()).length,trackedRateBuckets:requestBuckets.size},capabilities:{managerRpcPolicy:true,alertRefresh:true,wafAudit:true,chainDiagnostics:true,limitedRecovery:Boolean(recoveryControlDir&&recoveryControlToken),p2pPeerBan:false,validatorPowerChange:false},notice:'우선순위는 Manager 조회 소스 선택에만 적용되며 채굴·합의 투표권을 변경하지 않습니다.'});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/vouchers'){
+    if(!await dbReady())return json(res,503,{error:'데이터베이스 연결 대기 중'});
+    const [items,summary]=await Promise.all([query('SELECT id,public_id,amount_wei,status,expires_at,claimed_address,payout_tx_hash,claim_attempts,last_error,created_at,claimed_at FROM ieum_vouchers ORDER BY created_at DESC LIMIT 500'),query("SELECT count(*)::int AS count,coalesce(sum(amount_wei),0)::text AS issued_wei,coalesce(sum(amount_wei) FILTER(WHERE status='claimed'),0)::text AS claimed_wei,coalesce(sum(amount_wei) FILTER(WHERE status IN ('issued','claiming')),0)::text AS outstanding_wei FROM ieum_vouchers")]);
+    const s=summary.rows[0];return json(res,200,{items:items.rows,summary:{count:s.count,issued:formatVoucherAmount(s.issued_wei),claimed:formatVoucherAmount(s.claimed_wei),outstanding:formatVoucherAmount(s.outstanding_wei)},configured:Boolean(voucherPrivateKey&&voucherRpcUrl&&voucherPepper.length>=32)});
+  }
+  if(req.method==='POST'&&url.pathname==='/api/admin/vouchers'){
+    if(!await dbReady())return json(res,503,{error:'데이터베이스 연결 대기 중'});const input=await readJson(req),amountWei=parseVoucherAmount(input.amount),quantity=Math.min(Math.max(Number(input.quantity)||1,1),100),expiresAt=input.expiresAt?new Date(input.expiresAt):null;if(expiresAt&&(!Number.isFinite(expiresAt.getTime())||expiresAt<=new Date()))return json(res,400,{error:'만료일은 현재 이후여야 합니다.'});
+    if(!voucherPrivateKey||!voucherRpcUrl)return json(res,503,{error:'상품권 지급 지갑을 먼저 설정하세요.'});const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey,provider),[balance,reservedRows]=await Promise.all([provider.getBalance(wallet.address),query("SELECT coalesce(sum(amount_wei),0)::text AS reserved FROM ieum_vouchers WHERE status IN ('issued','claiming')")]),required=amountWei*BigInt(quantity)+BigInt(reservedRows.rows[0].reserved);if(balance<required)return json(res,409,{error:`상품권 준비금이 부족합니다. 지급 지갑 ${formatVoucherAmount(balance)} IEUM, 발행 후 필요 ${formatVoucherAmount(required)} IEUM`});
+    const created=[];for(let i=0;i<quantity;i++){let inserted=false;for(let attempt=0;attempt<5&&!inserted;attempt++){const secret=createVoucherSecrets(voucherPepper),claimUrl=`${voucherPublicUrl}/voucher/${secret.publicId}?token=${encodeURIComponent(secret.token)}`,imageUrl=`/api/vouchers/${secret.publicId}/image.svg?token=${encodeURIComponent(secret.token)}`;try{await query('INSERT INTO ieum_vouchers(id,public_id,code_hash,token_hash,amount_wei,expires_at) VALUES($1,$2,$3,$4,$5,$6)',[secret.id,secret.publicId,secret.codeHash,secret.tokenHash,amountWei.toString(),expiresAt?.toISOString()||null]);created.push({publicId:secret.publicId,amount:formatVoucherAmount(amountWei),code:secret.code,claimUrl,imageUrl,printUrl:`/voucher-print.html?id=${secret.publicId}&token=${encodeURIComponent(secret.token)}#code=${secret.code}`});inserted=true;}catch(error){if(error.code!=='23505')throw error;}}if(!inserted)throw new Error('중복되지 않는 상품권 번호 생성에 실패했습니다. 다시 시도하세요.');}
+    await audit({action:'vouchers-issued',ip,count:quantity,amountWei:amountWei.toString()});return json(res,201,{items:created,warning:'교환번호와 URL은 지금만 표시됩니다. 안전하게 저장하거나 인쇄하세요.'});
+  }
+  const voucherCancel=url.pathname.match(/^\/api\/admin\/vouchers\/([2-9A-HJ-NP-Z]{10})\/cancel$/);
+  if(req.method==='POST'&&voucherCancel){const rows=await query("UPDATE ieum_vouchers SET status='cancelled',updated_at=now() WHERE public_id=$1 AND status='issued' RETURNING public_id,status",[voucherCancel[1]]);return rows.rows[0]?json(res,200,{voucher:rows.rows[0]}):json(res,409,{error:'미사용 상품권만 취소할 수 있습니다.'});}
   if(req.method==='GET'&&url.pathname==='/api/admin/purchases'){
     if(!await dbReady())return json(res,503,{error:'데이터베이스 연결 대기 중'});
     const rows=await query('SELECT id,user_id,wallet_address,amount_aah,amount_ieum,deposit_code,status,deposit_confirmed_at,payout_tx_hash,created_at,updated_at FROM ieum_purchase_orders ORDER BY created_at DESC LIMIT 500');
@@ -299,6 +321,24 @@ async function rpc(url, method, params = []) {
   } finally { clearTimeout(timer); }
 }
 
+async function voucherPublicApi(req,res,url){
+  if(!await dbReady())return json(res,503,{error:'잠시 후 다시 시도해 주세요.'});
+  if(req.method==='GET'&&url.pathname==='/api/vouchers/summary'){const rows=await query("SELECT count(*)::int AS count,coalesce(sum(amount_wei),0)::text AS issued_wei,coalesce(sum(amount_wei) FILTER(WHERE status='claimed'),0)::text AS claimed_wei,coalesce(sum(amount_wei) FILTER(WHERE status IN ('issued','claiming')),0)::text AS outstanding_wei,count(*) FILTER(WHERE status='claimed')::int AS claimed_count FROM ieum_vouchers"),s=rows.rows[0];return json(res,200,{count:s.count,claimedCount:s.claimed_count,issued:formatVoucherAmount(s.issued_wei),claimed:formatVoucherAmount(s.claimed_wei),outstanding:formatVoucherAmount(s.outstanding_wei),notice:'상품권 누적 발행액이며 IEUM 체인 총발행량과는 별개입니다.'});}
+  const match=url.pathname.match(/^\/api\/vouchers\/([2-9A-HJ-NP-Z]{10})(?:\/(claim|image\.svg))?$/);if(!match)return json(res,404,{error:'상품권을 찾을 수 없습니다.'});
+  const publicId=match[1],action=match[2]||'status',token=String(url.searchParams.get('token')||'');if(!token||voucherPepper.length<32)return json(res,404,{error:'올바르지 않은 상품권 링크입니다.'});
+  const found=await query('SELECT * FROM ieum_vouchers WHERE public_id=$1 AND token_hash=$2',[publicId,voucherDigest(token,voucherPepper)]),voucher=found.rows[0];if(!voucher)return json(res,404,{error:'올바르지 않은 상품권 링크입니다.'});
+  const expired=voucher.expires_at&&new Date(voucher.expires_at)<=new Date();if(expired&&voucher.status==='issued')await query("UPDATE ieum_vouchers SET status='expired',updated_at=now() WHERE id=$1",[voucher.id]);const status=expired&&voucher.status==='issued'?'expired':voucher.status;
+  if(action==='image.svg'&&req.method==='GET'){const claimUrl=`${voucherPublicUrl}/voucher/${publicId}?token=${encodeURIComponent(token)}`,qr=await QRCode.toString(claimUrl,{type:'svg',margin:1,width:260,errorCorrectionLevel:'M'}),qrBody=qr.replace(/^<svg[^>]*>|<\/svg>$/g,'');const amount=formatVoucherAmount(voucher.amount_wei);const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#081d2b"/><stop offset="1" stop-color="#123b33"/></linearGradient></defs><rect width="1200" height="630" rx="42" fill="url(#g)"/><circle cx="1040" cy="90" r="180" fill="#21d39b" opacity=".12"/><text x="70" y="90" fill="#46e6b5" font-family="sans-serif" font-size="28" font-weight="700">IEUM DIGITAL GIFT</text><text x="70" y="205" fill="white" font-family="sans-serif" font-size="84" font-weight="800">${amount} IEUM</text><text x="70" y="275" fill="#a8c7c0" font-family="sans-serif" font-size="25">QR을 찍고 받을 지갑 주소와 교환번호를 입력하세요.</text><text x="70" y="330" fill="#ffcf70" font-family="sans-serif" font-size="22">먼저 정상 등록한 한 사람에게만 지급됩니다.</text><rect x="70" y="390" width="630" height="120" rx="18" fill="#fff" opacity=".08"/><text x="100" y="435" fill="#9db4b0" font-family="sans-serif" font-size="18">상품권 번호</text><text x="100" y="480" fill="white" font-family="monospace" font-size="31">${publicId}</text><g transform="translate(850 300)">${qrBody}</g><text x="850" y="585" fill="#a8c7c0" font-family="sans-serif" font-size="17">iem.aah.name · IEUM Mainnet 21004</text></svg>`;res.writeHead(200,{'content-type':'image/svg+xml','content-disposition':`attachment; filename="IEUM-${publicId}.svg"`,'cache-control':'no-store'});return res.end(svg);}
+  if(action==='status'&&req.method==='GET')return json(res,200,{publicId,amount:formatVoucherAmount(voucher.amount_wei),status,expiresAt:voucher.expires_at,claimedAt:voucher.claimed_at,txHash:voucher.payout_tx_hash,explorerUrl:voucher.payout_tx_hash?`${voucherExplorerUrl}${voucher.payout_tx_hash}`:null});
+  if(action==='claim'&&req.method==='POST'){
+    const input=await readJson(req),address=String(input.address||'').trim(),code=String(input.code||'');if(!validVoucherAddress(address))return json(res,400,{error:'0x로 시작하는 올바른 IEUM 주소를 입력하세요.'});if(!voucherCodeMatches(code,voucher.code_hash,voucherPepper)){await query('UPDATE ieum_vouchers SET claim_attempts=claim_attempts+1,updated_at=now() WHERE id=$1',[voucher.id]);return json(res,400,{error:'교환번호가 올바르지 않습니다.'});}
+    const run=async()=>{const client=await pool.connect();try{await client.query('BEGIN');const locked=(await client.query('SELECT * FROM ieum_vouchers WHERE id=$1 FOR UPDATE',[voucher.id])).rows[0];if(locked.status==='claimed'){await client.query('ROLLBACK');return{already:true,txHash:locked.payout_tx_hash};}if(locked.status!=='issued'||(locked.expires_at&&new Date(locked.expires_at)<=new Date())){await client.query('ROLLBACK');throw new Error('이미 사용·취소·만료되었거나 처리 중인 상품권입니다.');}await client.query("UPDATE ieum_vouchers SET status='claiming',claimed_address=$2,updated_at=now() WHERE id=$1",[voucher.id,address]);await client.query('COMMIT');}catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}finally{client.release();}
+      if(!voucherPrivateKey||!voucherRpcUrl)throw new Error('상품권 지급 지갑이 아직 설정되지 않았습니다.');try{const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey,provider),tx=await wallet.sendTransaction({to:address,value:BigInt(voucher.amount_wei)});await query("UPDATE ieum_vouchers SET status='claimed',payout_tx_hash=$2,claimed_at=now(),updated_at=now(),last_error=null WHERE id=$1",[voucher.id,tx.hash]);await audit({action:'voucher-claimed',ip:requestIp(req),publicId,address,txHash:tx.hash});return{txHash:tx.hash};}catch(error){await query("UPDATE ieum_vouchers SET status='failed',last_error=$2,updated_at=now() WHERE id=$1",[voucher.id,String(error.message||error).slice(0,500)]);throw new Error('지급 전송에 실패했습니다. 관리자가 확인할 때까지 다시 시도하지 마세요.');}};
+    const payout=voucherPayout.then(run,run);voucherPayout=payout.catch(()=>{});const result=await payout;return json(res,200,{ok:true,already:Boolean(result.already),txHash:result.txHash,explorerUrl:`${voucherExplorerUrl}${result.txHash}`});
+  }
+  return json(res,405,{error:'허용되지 않은 요청입니다.'});
+}
+
 async function inspectNode(node) {
   const started = Date.now();
   try {
@@ -451,6 +491,7 @@ export const server=http.createServer(async(req,res)=>{
   if(url.pathname.startsWith('/api/guilds')){try{return await guildApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
   if(url.pathname.startsWith('/api/rewards/')){try{return await rewardApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
   if(url.pathname==='/api/purchases'){try{return await purchaseApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
+  if(url.pathname.startsWith('/api/vouchers/')){try{return await voucherPublicApi(req,res,url);}catch(error){return json(res,400,{error:error.message});}}
   if(!['GET','HEAD'].includes(req.method))return json(res,405,{error:'허용되지 않은 HTTP 메서드입니다.'});
   if(req.url==='/api/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true}));}
   if(req.url.startsWith('/api/explorer/')){try{return await explorerApi(req,res,new URL(req.url,'http://localhost'));}catch(error){return json(res,500,{error:error.message});}}
@@ -460,7 +501,7 @@ export const server=http.createServer(async(req,res)=>{
   }
   const pathname = new URL(req.url, 'http://localhost').pathname;
   const detailRoutes=new Set(['/nodes','/validators','/accounts','/transactions','/explorer']);const entityRoute=/^\/(?:tx|address|block)\/[^/]+$/;const adminRoutes=/^\/admin(?:\/dashboard|\/rpc|\/waf|\/blocked|\/audit|\/peers|\/rewards)?$/;
-  const requested = pathname === '/' ? 'index.html' : pathname==='/admin/peers'?'peers.html':detailRoutes.has(pathname)||entityRoute.test(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
+  const requested = pathname === '/' ? 'index.html' : pathname==='/admin/peers'?'peers.html':pathname==='/admin/vouchers'?'vouchers-admin.html':/^\/voucher\/[2-9A-HJ-NP-Z]{10}$/.test(pathname)?'voucher.html':detailRoutes.has(pathname)||entityRoute.test(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
   const safe=normalize(requested).replace(/^(\.\.(\/|\\|$))+/,''); const path=join(root,'public',safe);
   try{const body=await readFile(path);res.writeHead(200,{'content-type':mime[extname(path)]||'application/octet-stream','cache-control':'public, max-age=300'});res.end(body);}
   catch{res.writeHead(404);res.end('Not found');}

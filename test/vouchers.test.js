@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createVoucherSecrets,formatVoucherAmount,parseVoucherAmount,voucherCodeMatches} from '../lib/vouchers.js';
+test('voucher amount is exact',()=>{assert.equal(parseVoucherAmount('2'),2000000000000000000n);assert.equal(formatVoucherAmount(parseVoucherAmount('1.2500')),'1.25');assert.throws(()=>parseVoucherAmount('0'));});
+test('voucher code is random and hashed',()=>{const pepper='x'.repeat(32),item=createVoucherSecrets(pepper);assert.match(item.code,/^[2-9A-HJ-NP-Z]{4}(?:-[2-9A-HJ-NP-Z]{4}){3}$/);assert.equal(voucherCodeMatches(item.code,item.codeHash,pepper),true);assert.equal(voucherCodeMatches('AAAA-BBBB-CCCC-DDDD',item.codeHash,pepper),false);});
+test('bulk voucher identifiers do not collide',()=>{const pepper='y'.repeat(32),codes=new Set(),publicIds=new Set(),tokens=new Set();for(let i=0;i<5000;i++){const item=createVoucherSecrets(pepper);codes.add(item.code);publicIds.add(item.publicId);tokens.add(item.tokenHash);}assert.equal(codes.size,5000);assert.equal(publicIds.size,5000);assert.equal(tokens.size,5000);});
