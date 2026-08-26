@@ -1,4 +1,7 @@
-# IEUM Manager 1.0.0.2
+# IEUM Manager 1.0.0.4
+
+주소 형식 구분, 제네시스 계정 안내, 링크 대비와 15행 목록 페이징은
+[`docs/VERSION_1.0.0.4_ADDRESS_LINK_PAGING.md`](docs/VERSION_1.0.0.4_ADDRESS_LINK_PAGING.md)를 참고하세요.
 
 SNS 0.01 IEUM 최초 1회 신청, 자동검증 장애 시 관리자 대기열 보존과 사용자 신청 화면은
 Chain Doctor와 제한된 4노드 복구 설치는

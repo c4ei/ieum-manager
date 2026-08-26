@@ -42,6 +42,7 @@ const paging=(url,total,fallback=25,max=100)=>{const limit=limitOf(url,fallback,
 export const normalizeExplorerTerm=value=>{const term=String(value||'').trim();return /^[0-9a-f]{64}$/i.test(term)?`0x${term}`:term;};
 const validHash=value=>/^0x[0-9a-f]{64}$/i.test(value||'');
 const validAddress=value=>/^0x[0-9a-f]{40}$/i.test(value||'');
+export const explorerTermType=value=>{const term=normalizeExplorerTerm(value);if(/^\d+$/.test(term))return 'block-height';if(validHash(term))return 'hash';if(validAddress(term))return 'address';return 'invalid';};
 const requestIp=req=>String(process.env.IEUM_MANAGER_TRUST_PROXY==='1'?(req.headers['cf-connecting-ip']||req.headers['x-real-ip']||req.socket.remoteAddress):(req.socket.remoteAddress||'unknown')).split(',')[0].trim();
 function rateAllowed(req,limit){const key=`${requestIp(req)}:${req.url.startsWith('/api/admin/')?'admin':'public'}`,now=Date.now(),entry=requestBuckets.get(key)||{started:now,count:0};if(now-entry.started>=60_000){entry.started=now;entry.count=0;}entry.count++;requestBuckets.set(key,entry);return entry.count<=limit;}
 const secureEqual=(left,right)=>{const a=Buffer.from(left),b=Buffer.from(right);return a.length===b.length&&timingSafeEqual(a,b);};
@@ -191,9 +192,10 @@ async function explorerApi(req,res,url){
   }
   if(path==='/api/explorer/search'){
     const term=normalizeExplorerTerm(url.searchParams.get('q'));
-    if(/^\d+$/.test(term)) return json(res,200,{type:'block',target:`/api/explorer/block/${term}`});
-    if(validHash(term)){const block=await query('SELECT 1 FROM blocks WHERE lower(hash)=lower($1)',[term]);return json(res,200,block.rows[0]?{type:'block',target:`/api/explorer/block/hash/${term}`}:{type:'transaction',target:`/api/explorer/transaction/${term}`});}
-    if(validAddress(term)) return json(res,200,{type:'address',target:`/api/explorer/address/${term}`});
+    const type=explorerTermType(term);
+    if(type==='block-height') return json(res,200,{type:'block',target:`/api/explorer/block/${term}`});
+    if(type==='hash'){const block=await query('SELECT 1 FROM blocks WHERE lower(hash)=lower($1)',[term]);return json(res,200,block.rows[0]?{type:'block',target:`/api/explorer/block/hash/${term}`}:{type:'transaction',target:`/api/explorer/transaction/${term}`});}
+    if(type==='address') return json(res,200,{type:'address',target:`/api/explorer/address/${term}`});
     return json(res,400,{error:'블록 높이, 트랜잭션 해시 또는 주소를 입력하세요.'});
   }
   let match=path.match(/^\/api\/explorer\/block\/(\d+)$/);
@@ -204,6 +206,7 @@ async function explorerApi(req,res,url){
   if(match){const row=await query(`SELECT t.*,b.timestamp,b.hash block_hash FROM transactions t JOIN blocks b ON b.height=t.block_height WHERE lower(t.hash)=lower($1)`,[match[1]]);return row.rows[0]?json(res,200,row.rows[0]):json(res,404,{error:'트랜잭션을 찾을 수 없습니다.'});}
   match=path.match(/^\/api\/explorer\/address\/(0x[0-9a-f]{40})$/i);
   if(match){const [account,txs]=await Promise.all([query('SELECT * FROM address_balances WHERE lower(address)=lower($1)',[match[1]]),query(`SELECT t.*,b.timestamp FROM transactions t JOIN blocks b ON b.height=t.block_height WHERE lower(sender)=lower($1) OR lower(recipient)=lower($1) ORDER BY block_height DESC,tx_index DESC LIMIT $2 OFFSET $3`,[match[1],limitOf(url),offsetOf(url)])]);return account.rows[0]?json(res,200,{account:account.rows[0],transactions:txs.rows}):json(res,404,{error:'주소를 찾을 수 없습니다.'});}
+  if(path.startsWith('/api/explorer/address/'))return json(res,400,{error:'IEUM 주소는 0x로 시작하는 40자리 계정 주소여야 합니다. 64자리 값은 거래·블록 해시 또는 검증자 식별자일 수 있습니다.'});
   if(path==='/api/explorer/tokens'){const rows=await query("SELECT * FROM tokens WHERE standard='IEUM-20' ORDER BY verified DESC,name LIMIT $1 OFFSET $2",[limitOf(url),offsetOf(url)]);return json(res,200,{supported:false,reason:'IEUM Chain 토큰 이벤트 RPC 추가 후 자동 인덱싱됩니다.',items:rows.rows});}
   if(path==='/api/explorer/nfts'){const rows=await query("SELECT * FROM tokens WHERE standard IN ('IEUM-721','IEUM-1155') ORDER BY verified DESC,name LIMIT $1 OFFSET $2",[limitOf(url),offsetOf(url)]);return json(res,200,{supported:false,reason:'IEUM Chain NFT 표준 및 이벤트 RPC 추가 후 자동 인덱싱됩니다.',items:rows.rows});}
   if(path==='/api/explorer/nodes'){const rows=await query('SELECT * FROM discovered_nodes ORDER BY online DESC,name');return json(res,200,{discoveryMode:'configured+peer-rpc-ready',items:rows.rows});}

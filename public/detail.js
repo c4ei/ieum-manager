@@ -4,7 +4,8 @@ const $=selector=>document.querySelector(selector);
 const esc=value=>String(value??'—').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const num=value=>Number(value??0).toLocaleString('ko-KR');
 const short=value=>value?`${value.slice(0,10)}…${value.slice(-8)}`:'—';
-const addressLink=value=>value?`<a href="/address/${esc(value)}" title="${esc(value)}">${short(value)}</a>`:'—';
+const validAddress=value=>/^0x[0-9a-f]{40}$/i.test(value||'');
+const addressLink=value=>validAddress(value)?`<a href="/address/${esc(value)}" title="${esc(value)}">${short(value)}</a>`:value?`<span title="계정 주소가 아닌 식별자">${short(value)}</span>`:'—';
 const amount=value=>amountHtml(value,{escape:esc});
 let page=1;const size=25;
 const tick=()=>$('#updated').textContent=new Date().toLocaleString('ko-KR');tick();setInterval(tick,1000);
@@ -16,7 +17,10 @@ async function entity(){
   const [kind,raw]=location.pathname.slice(1).split('/');if(!raw)return false;
   const value=decodeURIComponent(raw),hash=value.startsWith('0x')?value:`0x${value}`;let endpoint;
   if(kind==='tx')endpoint=`/api/explorer/transaction/${encodeURIComponent(hash)}`;
-  else if(kind==='address')endpoint=`/api/explorer/address/${encodeURIComponent(value)}`;
+  else if(kind==='address'){
+    if(!validAddress(value))throw new Error('IEUM 주소는 0x로 시작하는 40자리 계정 주소입니다. 입력값이 64자리라면 거래·블록 해시 또는 검증자 식별자일 수 있습니다.');
+    endpoint=`/api/explorer/address/${encodeURIComponent(value)}`;
+  }
   else if(kind==='block')endpoint=/^\d+$/.test(value)?`/api/explorer/block/${value}`:`/api/explorer/block/hash/${encodeURIComponent(hash)}`;
   else return false;
   const response=await fetch(endpoint),data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
@@ -26,7 +30,9 @@ async function entity(){
   }else if(kind==='address'){
     $('#detail-title').innerHTML='주소 <span>상세</span>';
     const rows=(data.transactions||[]).map(tx=>`<tr><td><a href="/tx/${esc(tx.hash)}">${short(tx.hash)}</a></td><td><a href="/block/${tx.block_height}">${num(tx.block_height)}</a></td><td>${addressLink(tx.sender)} → ${addressLink(tx.recipient)}</td><td class="amount">${amount(tx.value)}</td></tr>`);
-    $('#detail-content').innerHTML=`<article class="panel search-card"><p><b>Address</b> <code>${esc(data.account.address)}</code></p><p class="big-balance">${amount(data.account.balance)}</p><p>거래 ${num(data.account.tx_count)}건 · 최근 블록 ${num(data.account.last_seen_height)}</p></article>${table(['해시','블록','From → To','Value'],rows)}`;
+    const hasTransactions=Number(data.account.tx_count)>0;
+    const activity=hasTransactions?`거래 ${num(data.account.tx_count)}건 · 최근 블록 ${num(data.account.last_seen_height)}`:'제네시스 배정 · 일반 거래 없음';
+    $('#detail-content').innerHTML=`<article class="panel search-card"><p><b>Address</b> <code>${esc(data.account.address)}</code></p><p class="big-balance">${amount(data.account.balance)}</p><p>${activity}</p></article>${table(['해시','블록','From → To','Value'],rows)}`;
   }else{
     $('#detail-title').innerHTML=`블록 #${num(data.height)} <span>상세</span>`;
     const rows=(data.transactions||[]).map(tx=>`<tr><td><a href="/tx/${esc(tx.hash)}">${short(tx.hash)}</a></td><td>${addressLink(tx.sender)}</td><td>${addressLink(tx.recipient)}</td><td class="amount">${amount(tx.value)}</td></tr>`);
