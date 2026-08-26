@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS ieum_vouchers (
   amount_wei numeric(78,0) NOT NULL CHECK(amount_wei>0),
   status text NOT NULL DEFAULT 'issued' CHECK(status IN ('issued','claiming','claimed','cancelled','expired','failed')),
   expires_at timestamptz, claimed_address text, payout_tx_hash text UNIQUE,
+  payout_nonce bigint, payout_raw_tx text, payout_expected_hash text UNIQUE,
   claim_attempts integer NOT NULL DEFAULT 0, last_error text,
   created_at timestamptz NOT NULL DEFAULT now(), claimed_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now()
 );

@@ -1,4 +1,7 @@
-# IEUM Manager 1.0.0.4
+# IEUM Manager 1.0.0.6
+
+상품권 지급 거래를 전송 전에 DB에 확정 저장하고 장애 후 동일 거래만 복구하는 방법은
+[`docs/VERSION_1.0.0.6_VOUCHER_PAYOUT_RECOVERY.md`](docs/VERSION_1.0.0.6_VOUCHER_PAYOUT_RECOVERY.md)를 참고하세요.
 
 주소 형식 구분, 제네시스 계정 안내, 링크 대비와 15행 목록 페이징은
 [`docs/VERSION_1.0.0.4_ADDRESS_LINK_PAGING.md`](docs/VERSION_1.0.0.4_ADDRESS_LINK_PAGING.md)를 참고하세요.
