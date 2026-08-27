@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {rea
 process.env.IEUM_MANAGER_CONFIG=new URL('../config.example.json',import.meta.url).pathname;
 process.env.IEUM_MANAGER_PORT='0';
 const {hexToBigInt,formatUnits,summarizeProduction,normalizeExplorerTerm,explorerTermType,verifySnsClaim,managerVersion}=await import('../server.js');
-test('manager display version comes from package metadata',()=>assert.equal(managerVersion,'1.0.0.14'));
+test('manager display version comes from package metadata',()=>assert.equal(managerVersion,'1.0.0.15'));
 test('explorer accepts hashes with or without 0x',()=>{const hash='cf91fb3db2bac80635129cb54a9f6eaecefca2e100853000033eceb424de3574';assert.equal(normalizeExplorerTerm(hash),`0x${hash}`);assert.equal(normalizeExplorerTerm(`0x${hash}`),`0x${hash}`);});
 test('explorer distinguishes account addresses from 32-byte identifiers',()=>{assert.equal(explorerTermType('0x7ea8c617ad2635fa7bcfbb66056c3280df0987f4'),'address');assert.equal(explorerTermType('d475e3a8a10a569c05c3d6406bb37adc681f5372e5855ffd76d24d5df91cad5d'),'hash');assert.equal(explorerTermType('not-an-address'),'invalid');});
 test('hex quantity parser',()=>assert.equal(hexToBigInt('0x2a'),42n));

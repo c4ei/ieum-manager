@@ -1,7 +1,7 @@
-# IEUM Manager 1.0.0.14
+# IEUM Manager 1.0.0.15
 
 상품권 수령자의 기기별 Wallet 설치·복귀 안내는
-최신 관리자 공통 메뉴·Dashboard 페이징·QR 체험 명함은 [`docs/VERSION_1.0.0.14_ADMIN_PAGING_TRIAL_CARD.md`](docs/VERSION_1.0.0.14_ADMIN_PAGING_TRIAL_CARD.md)를 참고하세요.
+최신 QR 명함 한글 글꼴·한국어/영어 전환·JWT 표시 개선은 [`docs/VERSION_1.0.0.15_TRIAL_I18N_JWT.md`](docs/VERSION_1.0.0.15_TRIAL_I18N_JWT.md)를 참고하세요.
 
 상품권 앞면 QR 확대와 카메라 인식성 개선은
 [`docs/VERSION_1.0.0.11_VOUCHER_QR.md`](docs/VERSION_1.0.0.11_VOUCHER_QR.md)를 참고하세요.
