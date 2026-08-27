@@ -1,5 +1,12 @@
 # IEUM Manager 변경 내역
 
+## 1.0.0.7 - 2026-08-27
+
+- IEUM Chain `Transaction::id()`와 동일한 원장 거래 해시를 지급 전에 계산
+- v1.0.0.6의 keccak 예상 해시를 저장한 `claiming` 상품권을 raw 거래 검증 후 자동 교정
+- 감사 로그 쓰기 실패가 API 응답과 Manager 프로세스를 종료하지 않도록 격리
+- Docker named volume의 `/app/data`, `/app/logs` 소유권을 시작 시 자동 교정
+
 ## 1.0.0.6 - 2026-08-26
 
 - Manager CI의 두 Docker Compose 단계에 상품권 필수 환경변수 추가

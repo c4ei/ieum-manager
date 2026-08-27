@@ -45,6 +45,13 @@ sudo docker compose exec -T postgres \
 ```bash
 sudo docker compose config
 sudo docker compose build --no-cache manager indexer
+sudo docker compose run --rm --no-deps \
+  --user root \
+  --entrypoint sh manager \
+  -c 'mkdir -p /app/logs /app/data &&
+      chown -R ieum:ieum /app/logs /app/data &&
+      chmod 750 /app/logs /app/data'
+
 sudo docker compose up -d --force-recreate manager indexer
 sudo docker compose logs --tail=100 manager indexer
 ```

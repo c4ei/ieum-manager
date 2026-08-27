@@ -1,4 +1,7 @@
-# IEUM Manager 1.0.0.6
+# IEUM Manager 1.0.0.7
+
+IEUM Chain 원장 거래 ID 연동, v1.0.0.6 처리 중 상품권 자동 복구와 Docker 로그 권한 자동 교정은
+[`docs/VERSION_1.0.0.7_VOUCHER_LEDGER_HASH.md`](docs/VERSION_1.0.0.7_VOUCHER_LEDGER_HASH.md)를 참고하세요.
 
 상품권 지급 거래를 전송 전에 DB에 확정 저장하고 장애 후 동일 거래만 복구하는 방법은
 [`docs/VERSION_1.0.0.6_VOUCHER_PAYOUT_RECOVERY.md`](docs/VERSION_1.0.0.6_VOUCHER_PAYOUT_RECOVERY.md)를 참고하세요.

@@ -11,7 +11,7 @@ import {applyPolicy,audit,loadPolicy,recentAudit,savePolicy,wafDecision} from '.
 import {normalizePeer,peerSummary} from './lib/peers.js';
 import {assertNoOverlap,assertSnsClaimUnique,holderConfig,normalizeCampaign,sanitizePayout,sanitizeSnsClaim} from './lib/reward-campaigns.js';
 import {diagnoseNodes} from './lib/chain-health.js';
-import {buildVoucherPayout,createVoucherSecrets,formatVoucherAmount,parseVoucherAmount,validVoucherAddress,voucherCodeMatches,voucherDigest} from './lib/vouchers.js';
+import {buildVoucherPayout,createVoucherSecrets,formatVoucherAmount,inspectVoucherPayout,parseVoucherAmount,validVoucherAddress,voucherCodeMatches,voucherDigest} from './lib/vouchers.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const host = process.env.IEUM_MANAGER_HOST || '0.0.0.0';
@@ -77,6 +77,17 @@ export async function verifySnsClaim(claim,{verifyUrl=snsVerifyUrl,verifyToken=s
 }
 function sameOrigin(req){const origin=req.headers.origin;if(!origin)return true;return origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`;}
 
+async function normalizeStoredVoucherPayout(voucher){
+  if(!/^0x[0-9a-f]+$/i.test(voucher.payout_raw_tx||''))throw new Error('저장된 raw 거래가 없어 안전하게 자동 복구할 수 없습니다.');
+  const signed=inspectVoucherPayout(voucher.payout_raw_tx);
+  const payoutWallet=new Wallet(voucherPrivateKey).address.toLowerCase();
+  if(signed.from!==payoutWallet||signed.to!==String(voucher.claimed_address||'').toLowerCase()||signed.value!==BigInt(voucher.amount_wei)||signed.nonce!==Number(voucher.payout_nonce))throw new Error('저장된 raw 거래가 상품권 지급 정보와 일치하지 않아 자동 복구를 중단했습니다.');
+  if(String(voucher.payout_expected_hash||'').toLowerCase()!==signed.expectedHash.toLowerCase()){
+    await query('UPDATE ieum_vouchers SET payout_expected_hash=$2,updated_at=now() WHERE id=$1',[voucher.id,signed.expectedHash]);
+  }
+  return {...voucher,payout_expected_hash:signed.expectedHash};
+}
+
 async function adminApi(req,res,url){
   const ip=requestIp(req);if(!adminAuthorized(req)){await audit({action:'auth-failed',ip});return json(res,401,{error:'관리자 인증이 필요합니다.'});}
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
@@ -97,9 +108,10 @@ async function adminApi(req,res,url){
   if(req.method==='POST'&&voucherCancel){const rows=await query("UPDATE ieum_vouchers SET status='cancelled',updated_at=now() WHERE public_id=$1 AND status='issued' RETURNING public_id,status",[voucherCancel[1]]);return rows.rows[0]?json(res,200,{voucher:rows.rows[0]}):json(res,409,{error:'미사용 상품권만 취소할 수 있습니다.'});}
   const voucherRecovery=url.pathname.match(/^\/api\/admin\/vouchers\/([2-9A-HJ-NP-Z]{10})\/(reconcile|rebroadcast)$/);
   if(req.method==='POST'&&voucherRecovery){
-    const publicId=voucherRecovery[1],action=voucherRecovery[2],rows=await query('SELECT * FROM ieum_vouchers WHERE public_id=$1',[publicId]),voucher=rows.rows[0];if(!voucher)return json(res,404,{error:'상품권을 찾을 수 없습니다.'});if(voucher.status==='claimed')return json(res,200,{voucher:{publicId,status:'claimed',txHash:voucher.payout_tx_hash},already:true});if(!['claiming','failed'].includes(voucher.status)||!validHash(voucher.payout_expected_hash))return json(res,409,{error:'저장된 예상 거래 해시가 없어 자동 복구할 수 없습니다. 체인과 지급 지갑 nonce를 수동 확인하세요.'});
+    const publicId=voucherRecovery[1],action=voucherRecovery[2],rows=await query('SELECT * FROM ieum_vouchers WHERE public_id=$1',[publicId]);let voucher=rows.rows[0];if(!voucher)return json(res,404,{error:'상품권을 찾을 수 없습니다.'});if(voucher.status==='claimed')return json(res,200,{voucher:{publicId,status:'claimed',txHash:voucher.payout_tx_hash},already:true});if(!['claiming','failed'].includes(voucher.status))return json(res,409,{error:'처리 중이거나 실패한 상품권만 복구할 수 있습니다.'});
+    voucher=await normalizeStoredVoucherPayout(voucher);
     const existing=(await rpc(voucherRpcUrl,'eth_getTransactionByHash',[voucher.payout_expected_hash])).result;if(existing){await query("UPDATE ieum_vouchers SET status='claimed',payout_tx_hash=payout_expected_hash,claimed_at=coalesce(claimed_at,now()),last_error=null,updated_at=now() WHERE id=$1",[voucher.id]);await audit({action:'voucher-reconciled',ip,publicId,txHash:voucher.payout_expected_hash});return json(res,200,{voucher:{publicId,status:'claimed',txHash:voucher.payout_expected_hash},foundOnchain:true});}
-    if(action==='reconcile')return json(res,409,{error:'저장된 예상 해시의 거래가 현재 RPC에서 발견되지 않았습니다. 다른 운영 노드에서도 확인한 뒤 동일 raw 거래 재전파를 선택하세요.',expectedHash:voucher.payout_expected_hash});if(!/^0x[0-9a-f]+$/i.test(voucher.payout_raw_tx||''))return json(res,409,{error:'저장된 raw 거래가 없어 안전하게 재전파할 수 없습니다.'});
+    if(action==='reconcile')return json(res,409,{error:'저장된 IEUM 원장 해시의 거래가 현재 RPC에서 발견되지 않았습니다. 다른 운영 노드에서도 확인한 뒤 동일 raw 거래 재전파를 선택하세요.',expectedHash:voucher.payout_expected_hash});
     let returnedHash;try{returnedHash=(await rpc(voucherRpcUrl,'eth_sendRawTransaction',[voucher.payout_raw_tx])).result;}catch(error){const after=(await rpc(voucherRpcUrl,'eth_getTransactionByHash',[voucher.payout_expected_hash]).catch(()=>({result:null}))).result;if(!after)throw error;returnedHash=voucher.payout_expected_hash;}if(String(returnedHash).toLowerCase()!==voucher.payout_expected_hash.toLowerCase())throw new Error('재전파 결과 해시가 저장된 예상 해시와 다릅니다.');await query("UPDATE ieum_vouchers SET status='claimed',payout_tx_hash=payout_expected_hash,claimed_at=coalesce(claimed_at,now()),last_error=null,updated_at=now() WHERE id=$1",[voucher.id]);await audit({action:'voucher-rebroadcast',ip,publicId,txHash:voucher.payout_expected_hash});return json(res,200,{voucher:{publicId,status:'claimed',txHash:voucher.payout_expected_hash},rebroadcast:true});
   }
   if(req.method==='GET'&&url.pathname==='/api/admin/purchases'){
