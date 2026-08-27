@@ -1,0 +1,1 @@
+.summary-grid{grid-template-columns:repeat(3,1fr)}.summary-grid span small{display:inline;color:#78928c;font-weight:400}.summary-grid article>small{display:block;margin-top:6px;color:#9db4b0}@media(max-width:720px){.summary-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:420px){.summary-grid{grid-template-columns:1fr}}

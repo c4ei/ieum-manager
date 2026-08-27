@@ -20,6 +20,8 @@ test('voucher image separates inline print rendering from explicit download',asy
   assert.doesNotMatch(print,/download=1/);
   assert.match(print,/front\.onload/);
   assert.match(print,/front\.onerror/);
+  assert.match(print,/front\.complete&&front\.naturalWidth/);
+  assert.match(print,/front\.decode/);
 });
 
 test('voucher admin provides status filters, paging, safe session reprint and human amounts',async()=>{
@@ -32,6 +34,24 @@ test('voucher admin provides status filters, paging, safe session reprint and hu
   assert.match(script,/ieum-voucher-print-session/);
   assert.doesNotMatch(script,/localStorage/);
   assert.match(server,/amount:formatVoucherAmount\(item\.amount_wei\)/);
+});
+
+test('future voucher reprint is encrypted, authenticated, audited and never listed as ciphertext',async()=>{
+  const [server,script]=await Promise.all([read('../server.js'),read('../public/vouchers-admin.js')]);
+  assert.match(server,/encryptVoucherSecret/);
+  assert.match(server,/voucher-secret-viewed/);
+  assert.match(server,/secret_ciphertext IS NOT NULL/);
+  assert.doesNotMatch(server,/items:items\.rows\.map\(item=>\(\{\.\.\.item,secret_ciphertext/);
+  assert.match(script,/보기·재출력/);
+  assert.match(script,/data-hide-secret/);
+  assert.match(script,/폐기 사유/);
+});
+
+test('voucher summary separates historical, valid, cancelled and expired totals',async()=>{
+  const [server,script]=await Promise.all([read('../server.js'),read('../public/vouchers-admin.js')]);
+  for(const field of ['valid_wei','cancelled_wei','expired_wei','valid_count','cancelled_count','expired_count'])assert.match(server,new RegExp(field));
+  for(const label of ['누적 발행','유효 발행','폐기','만료'])assert.match(script,new RegExp(label));
+  assert.match(server,/status NOT IN \('cancelled','expired'\)/);
 });
 
 test('public Admin navigation is added only after a verified JWT session',async()=>{

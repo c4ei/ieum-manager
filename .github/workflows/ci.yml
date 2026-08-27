@@ -33,6 +33,7 @@ jobs:
           IEUM_VOUCHER_PRIVATE_KEY: ci-only-private-key-placeholder
           IEUM_VOUCHER_RPC_URL: http://127.0.0.1:8989
           IEUM_VOUCHER_CODE_PEPPER: ci-only-voucher-pepper-32-characters-minimum
+          IEUM_VOUCHER_ARCHIVE_KEY: ci-only-voucher-archive-key-32-characters-minimum
         run: docker compose config
       - name: Build application images without starting PostgreSQL
         env:
@@ -42,4 +43,5 @@ jobs:
           IEUM_VOUCHER_PRIVATE_KEY: ci-only-private-key-placeholder
           IEUM_VOUCHER_RPC_URL: http://127.0.0.1:8989
           IEUM_VOUCHER_CODE_PEPPER: ci-only-voucher-pepper-32-characters-minimum
+          IEUM_VOUCHER_ARCHIVE_KEY: ci-only-voucher-archive-key-32-characters-minimum
         run: docker compose build manager indexer

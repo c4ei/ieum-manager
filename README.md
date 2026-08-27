@@ -1,4 +1,10 @@
-# IEUM Manager 1.0.0.8
+# IEUM Manager 1.0.0.10
+
+누적 발행과 유효 발행·폐기·만료 금액 및 건수 분리는
+[`docs/VERSION_1.0.0.10_VOUCHER_ACCOUNTING.md`](docs/VERSION_1.0.0.10_VOUCHER_ACCOUNTING.md)를 참고하세요.
+
+상품권 폐기 이력, 관리자 보기·재출력 암호화 보관과 정적 파일 캐시 방지는
+[`docs/VERSION_1.0.0.9_VOUCHER_LIFECYCLE.md`](docs/VERSION_1.0.0.9_VOUCHER_LIFECYCLE.md)를 참고하세요.
 
 상품권 앞면 SVG·인쇄 복구, 관리자 상태/검색/페이징, 세션 내 재출력과 JWT 전용 Admin 메뉴는
 [`docs/VERSION_1.0.0.8_VOUCHER_PRINT_ADMIN.md`](docs/VERSION_1.0.0.8_VOUCHER_PRINT_ADMIN.md)를 참고하세요.
