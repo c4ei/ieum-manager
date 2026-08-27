@@ -1,4 +1,7 @@
-# IEUM Manager 1.0.0.7
+# IEUM Manager 1.0.0.8
+
+상품권 앞면 SVG·인쇄 복구, 관리자 상태/검색/페이징, 세션 내 재출력과 JWT 전용 Admin 메뉴는
+[`docs/VERSION_1.0.0.8_VOUCHER_PRINT_ADMIN.md`](docs/VERSION_1.0.0.8_VOUCHER_PRINT_ADMIN.md)를 참고하세요.
 
 IEUM Chain 원장 거래 ID 연동, v1.0.0.6 처리 중 상품권 자동 복구와 Docker 로그 권한 자동 교정은
 [`docs/VERSION_1.0.0.7_VOUCHER_LEDGER_HASH.md`](docs/VERSION_1.0.0.7_VOUCHER_LEDGER_HASH.md)를 참고하세요.
