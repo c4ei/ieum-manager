@@ -69,7 +69,9 @@ CREATE TABLE IF NOT EXISTS ieum_vouchers (
   status text NOT NULL DEFAULT 'issued' CHECK(status IN ('issued','claiming','claimed','cancelled','expired','failed')),
   expires_at timestamptz, claimed_address text, payout_tx_hash text UNIQUE,
   payout_nonce bigint, payout_raw_tx text, payout_expected_hash text UNIQUE,
-  claim_attempts integer NOT NULL DEFAULT 0, last_error text,
+  secret_ciphertext text, claim_attempts integer NOT NULL DEFAULT 0, last_error text,
+  cancelled_at timestamptz, cancelled_by text, cancellation_reason text,
+  print_access_count integer NOT NULL DEFAULT 0, print_accessed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(), claimed_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ieum_vouchers_status_idx ON ieum_vouchers(status,created_at DESC);

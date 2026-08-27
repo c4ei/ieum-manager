@@ -34,6 +34,17 @@ test('voucher admin provides status filters, paging, safe session reprint and hu
   assert.match(server,/amount:formatVoucherAmount\(item\.amount_wei\)/);
 });
 
+test('future voucher reprint is encrypted, authenticated, audited and never listed as ciphertext',async()=>{
+  const [server,script]=await Promise.all([read('../server.js'),read('../public/vouchers-admin.js')]);
+  assert.match(server,/encryptVoucherSecret/);
+  assert.match(server,/voucher-secret-viewed/);
+  assert.match(server,/secret_ciphertext IS NOT NULL/);
+  assert.doesNotMatch(server,/items:items\.rows\.map\(item=>\(\{\.\.\.item,secret_ciphertext/);
+  assert.match(script,/보기·재출력/);
+  assert.match(script,/data-hide-secret/);
+  assert.match(script,/폐기 사유/);
+});
+
 test('public Admin navigation is added only after a verified JWT session',async()=>{
   const app=await read('../public/app.js');
   assert.match(app,/fetch\('\/api\/session'\)/);
