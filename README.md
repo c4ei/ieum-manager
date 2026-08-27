@@ -1,10 +1,10 @@
-# IEUM Manager 1.0.0.11
+# IEUM Manager 1.0.0.12
+
+상품권 수령자의 기기별 Wallet 설치·복귀 안내는
+[`docs/VERSION_1.0.0.12_VOUCHER_WALLET_ONBOARDING.md`](docs/VERSION_1.0.0.12_VOUCHER_WALLET_ONBOARDING.md)를 참고하세요.
 
 상품권 앞면 QR 확대와 카메라 인식성 개선은
 [`docs/VERSION_1.0.0.11_VOUCHER_QR.md`](docs/VERSION_1.0.0.11_VOUCHER_QR.md)를 참고하세요.
-
-<img width="958" height="524" alt="image" src="https://github.com/user-attachments/assets/518e5bc1-dab1-49d7-8c4b-beba004b51c0" />
-
 
 누적 발행과 유효 발행·폐기·만료 금액 및 건수 분리는
 [`docs/VERSION_1.0.0.10_VOUCHER_ACCOUNTING.md`](docs/VERSION_1.0.0.10_VOUCHER_ACCOUNTING.md)를 참고하세요.
