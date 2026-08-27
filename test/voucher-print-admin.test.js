@@ -63,6 +63,7 @@ test('public Admin navigation is added only after a verified JWT session',async(
   const app=await read('../public/app.js');
   assert.match(app,/fetch\('\/api\/session'\)/);
   assert.match(app,/if\(session\?\.admin\)/);
-  assert.match(app,/href="\/admin\/vouchers"/);
+  assert.match(app,/href="\/admin\/dashboard"/);
+  assert.doesNotMatch(app,/href="\/admin\/vouchers">Admin/);
   assert.doesNotMatch(app,/insertAdjacentHTML\('beforeend','<a href="\/admin\.html">Admin<\/a>'\)/);
 });

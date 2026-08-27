@@ -1,7 +1,7 @@
-# IEUM Manager 1.0.0.15
+# IEUM Manager 1.0.0.16
 
 상품권 수령자의 기기별 Wallet 설치·복귀 안내는
-최신 QR 명함 한글 글꼴·한국어/영어 전환·JWT 표시 개선은 [`docs/VERSION_1.0.0.15_TRIAL_I18N_JWT.md`](docs/VERSION_1.0.0.15_TRIAL_I18N_JWT.md)를 참고하세요.
+최신 CAPTCHA 안내와 체크박스 UI 개선은 [`docs/VERSION_1.0.0.16_CAPTCHA_UX.md`](docs/VERSION_1.0.0.16_CAPTCHA_UX.md)를 참고하세요.
 
 상품권 앞면 QR 확대와 카메라 인식성 개선은
 [`docs/VERSION_1.0.0.11_VOUCHER_QR.md`](docs/VERSION_1.0.0.11_VOUCHER_QR.md)를 참고하세요.

@@ -556,7 +556,7 @@ export const server=http.createServer(async(req,res)=>{
   res.setHeader('x-content-type-options','nosniff'); res.setHeader('referrer-policy','no-referrer');
   res.setHeader('x-frame-options','DENY');res.setHeader('permissions-policy','camera=(), microphone=(), geolocation=()');
   res.setHeader('cross-origin-resource-policy','same-origin');
-  res.setHeader('content-security-policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:");
+  res.setHeader('content-security-policy',"default-src 'self'; style-src 'self'; script-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data:");
   const url=new URL(req.url,'http://localhost');
   const policy=await loadPolicy(),clientIp=requestIp(req),decision=wafDecision(policy,clientIp,{path:url.pathname,userAgent:req.headers['user-agent']});
   if(decision.action!=='allow'){await audit({action:`waf-${decision.action}`,ip:clientIp,method:req.method,path:url.pathname.slice(0,512),score:decision.score,reasons:decision.reasons,userAgent:String(req.headers['user-agent']||'').slice(0,300)});if(decision.action==='block'){policy.waf.quarantine[clientIp]={score:decision.score,reasons:decision.reasons,expiresAt:new Date(Date.now()+Number(policy.waf.blockTtlSeconds||3600)*1000).toISOString()};await savePolicy(policy);return json(res,403,{error:'WAF에서 요청을 차단했습니다.'});}}
