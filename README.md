@@ -1,7 +1,7 @@
-# IEUM Manager 1.0.0.12
+# IEUM Manager 1.0.0.13
 
 상품권 수령자의 기기별 Wallet 설치·복귀 안내는
-[`docs/VERSION_1.0.0.12_VOUCHER_WALLET_ONBOARDING.md`](docs/VERSION_1.0.0.12_VOUCHER_WALLET_ONBOARDING.md)를 참고하세요.
+최신 상품권 PNG와 체험 명함 캠페인은 [`docs/VERSION_1.0.0.13_VOUCHER_PNG_TRIAL_CAMPAIGNS.md`](docs/VERSION_1.0.0.13_VOUCHER_PNG_TRIAL_CAMPAIGNS.md)를 참고하세요.
 
 상품권 앞면 QR 확대와 카메라 인식성 개선은
 [`docs/VERSION_1.0.0.11_VOUCHER_QR.md`](docs/VERSION_1.0.0.11_VOUCHER_QR.md)를 참고하세요.
