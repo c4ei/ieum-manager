@@ -5,7 +5,7 @@ const num=v=>Number(v??0).toLocaleString('ko-KR');
 const listPageSize=15,listPages={top:1,account:1,flow:1};
 const pageItems=(kind,items)=>{const pages=Math.max(1,Math.ceil(items.length/listPageSize));listPages[kind]=Math.min(Math.max(listPages[kind],1),pages);const start=(listPages[kind]-1)*listPageSize;return {items:items.slice(start,start+listPageSize),start,pages,page:listPages[kind]};};
 const listPager=(selector,kind,result)=>{$(selector).innerHTML=`<button data-list-kind="${kind}" data-page="${result.page-1}" ${result.page<=1?'disabled':''}>이전</button><span>${num(result.page)} / ${num(result.pages)}</span><button data-list-kind="${kind}" data-page="${result.page+1}" ${result.page>=result.pages?'disabled':''}>다음</button>`;};
-fetch('/api/session').then(response=>response.ok?response.json():null).then(session=>{if(session?.admin)document.querySelector('aside nav')?.insertAdjacentHTML('beforeend','<a href="/admin/vouchers">Admin</a>');}).catch(()=>{});
+fetch('/api/session').then(response=>response.ok?response.json():null).then(session=>{if(session?.admin)document.querySelector('aside nav')?.insertAdjacentHTML('beforeend','<a href="/admin/dashboard">Admin</a>');}).catch(()=>{});
 function render(data){const s=data.summary,c=data.chain||{};
  document.querySelector('footer b').textContent=`IEUM Manager v${data.managerVersion}`;
  $('#chain-version').textContent=data.chainVersion?`IEUM Chain v${data.chainVersion}`:data.chainVersions?.length?`Chain 버전 불일치: ${data.chainVersions.join(' / ')}`:'IEUM Chain 확인 불가';
