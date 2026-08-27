@@ -1,4 +1,7 @@
-# IEUM Manager 1.0.0.10
+# IEUM Manager 1.0.0.11
+
+상품권 앞면 QR 확대와 카메라 인식성 개선은
+[`docs/VERSION_1.0.0.11_VOUCHER_QR.md`](docs/VERSION_1.0.0.11_VOUCHER_QR.md)를 참고하세요.
 
 누적 발행과 유효 발행·폐기·만료 금액 및 건수 분리는
 [`docs/VERSION_1.0.0.10_VOUCHER_ACCOUNTING.md`](docs/VERSION_1.0.0.10_VOUCHER_ACCOUNTING.md)를 참고하세요.

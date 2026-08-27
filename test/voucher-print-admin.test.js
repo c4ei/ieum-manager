@@ -5,11 +5,13 @@ import QRCode from 'qrcode';
 
 const read=path=>readFile(new URL(path,import.meta.url),'utf8');
 
-test('voucher QR body removes the trailing outer SVG tag and remains embeddable',async()=>{
+test('voucher QR preserves its viewBox and is embedded at a camera-readable size',async()=>{
   const qr=await QRCode.toString('https://iem.aah.name/voucher/TEST',{type:'svg'});
-  const body=qr.replace(/^\s*<svg[^>]*>/,'').replace(/<\/svg>\s*$/,'');
-  assert.doesNotMatch(body,/<\/?svg\b/);
-  assert.match(body,/<path\b/);
+  const placed=qr.trim().replace(/^<svg\s/,'<svg x="820" y="245" width="300" height="300" ');
+  assert.match(placed,/viewBox=/);
+  assert.match(placed,/width="300" height="300"/);
+  assert.match(placed,/<path\b/);
+  assert.match(placed,/<\/svg>$/);
 });
 
 test('voucher image separates inline print rendering from explicit download',async()=>{
@@ -17,6 +19,9 @@ test('voucher image separates inline print rendering from explicit download',asy
   assert.match(server,/download=url\.searchParams\.get\('download'\)==='1'/);
   assert.match(server,/download\?'attachment':'inline'/);
   assert.match(server,/image\.svg\?token=.*&download=1/);
+  assert.match(server,/margin:2/);
+  assert.match(server,/width="300" height="300"/);
+  assert.match(server,/width="320" height="320"/);
   assert.doesNotMatch(print,/download=1/);
   assert.match(print,/front\.onload/);
   assert.match(print,/front\.onerror/);
