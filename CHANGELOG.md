@@ -199,3 +199,8 @@
 - 지갑 소유 확인 체크박스를 왼쪽 체크박스·오른쪽 문장 구조로 수정
 - CAPTCHA 로딩·완료·만료·키 미설정·스크립트 차단 상태 안내 추가
 - CAPTCHA 완료 전 지급 버튼 비활성화 및 오류 위치 자동 안내
+# 1.0.0.17
+
+- Docker Compose CI 검증과 이미지 빌드에 체험 캠페인 fingerprint 키 placeholder 추가
+- 체험 링크에 캠페인별 Open Graph, Twitter Card, canonical 및 Schema.org JSON-LD 추가
+- AAH 관리자 JWT의 서명·권한·만료·손상 토큰 회귀 테스트 추가

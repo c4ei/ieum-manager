@@ -1,7 +1,7 @@
-# IEUM Manager 1.0.0.16
+# IEUM Manager 1.0.0.17
 
-상품권 수령자의 기기별 Wallet 설치·복귀 안내는
-최신 CAPTCHA 안내와 체크박스 UI 개선은 [`docs/VERSION_1.0.0.16_CAPTCHA_UX.md`](docs/VERSION_1.0.0.16_CAPTCHA_UX.md)를 참고하세요.
+최신 CI 환경변수 보완, 체험 링크 미리보기·SEO/AI 메타데이터와 JWT 검증은
+[`docs/VERSION_1.0.0.17_TRIAL_METADATA_CI_JWT.md`](docs/VERSION_1.0.0.17_TRIAL_METADATA_CI_JWT.md)를 참고하세요.
 
 상품권 앞면 QR 확대와 카메라 인식성 개선은
 [`docs/VERSION_1.0.0.11_VOUCHER_QR.md`](docs/VERSION_1.0.0.11_VOUCHER_QR.md)를 참고하세요.
