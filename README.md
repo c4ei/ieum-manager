@@ -3,6 +3,12 @@
 체험 지급 이메일 확인, IP·국가 기록, 분리된 마케팅 동의와 고객 타기팅·설문 관리는
 [`docs/VERSION_1.0.0.18_TRIAL_EMAIL_AUDIENCE.md`](docs/VERSION_1.0.0.18_TRIAL_EMAIL_AUDIENCE.md)를 참고하세요.
 
+https://iem.aah.name/trial/B3DBDDE1F6BE
+
+<img width="529" height="615" alt="image" src="https://github.com/user-attachments/assets/b5f93a4b-4d87-46ca-ab5c-9b7fa99bea44" />
+
+
+
 ## 이전 1.0.0.17
 
 최신 CI 환경변수 보완, 체험 링크 미리보기·SEO/AI 메타데이터와 JWT 검증은
