@@ -1,0 +1,3 @@
+const button=document.getElementById('verify'),result=document.getElementById('result'),token=new URLSearchParams(location.search).get('token')||'';
+if(!token){button.disabled=true;result.textContent='확인 토큰이 없습니다.';}
+button.onclick=async()=>{button.disabled=true;result.textContent='이메일 확인과 지급을 처리하고 있습니다…';try{const response=await fetch('/api/trial-email/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})}),data=await response.json();if(!response.ok)throw new Error(data.error);result.innerHTML=`지급 완료 · <a href="${data.explorerUrl}">Explorer에서 거래 확인</a>`;}catch(error){result.textContent=error.message;button.disabled=false;}};

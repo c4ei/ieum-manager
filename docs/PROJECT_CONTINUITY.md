@@ -52,7 +52,7 @@ IEUM은 한국에서 시작하지만 국가·언어에 묶이지 않는 실사�
 | 저장소 | 소스 버전 | 표시/태그 | 안정 릴리스 |
 | --- | --- | --- | --- |
 | Chain | `1.0.5-1` | `1.0.5.1`, `v1.0.5.1` | 버전별 GitHub Release |
-| Manager | `1.0.0-12` | `1.0.0.12` | 서버/Docker 배포 |
+| Manager | `1.0.0-18` | `1.0.0.18` | 서버/Docker 배포 |
 | Cold Wallet | `1.0.1-0` | `1.0.1.0`, `v1.0.1.0` | `cold-wallet-latest` |
 | Wallet | `1.0.2-1` | `1.0.2.1`, `v1.0.2.1` | `wallet-light-latest`, `wallet-normal-latest` |
 
@@ -150,7 +150,7 @@ GitHub Actions 성공은 운영 서버 정상의 충분조건이 아니다. 배�
 - Chain `v1.0.5.1` 릴리스와 다중 플랫폼 바이너리·체크섬이 존재한다.
 - Wallet `v1.0.2.1` Light/Normal 다중 플랫폼 빌드·서명·latest 갱신이 성공했다.
 - Cold Wallet `v1.0.1.0` 다중 플랫폼 설치 파일과 체크섬 생성이 성공했다.
-- Manager `1.0.0.12` 테스트, Compose 검증, Docker 이미지 빌드가 성공했다.
+- Manager `1.0.0.18`은 이메일 인증·동의·IP/국가·고객 타기팅 기능을 추가했다. 로컬 Node 테스트는 통과했으며 Compose와 이미지 빌드는 Docker가 있는 환경에서 확인한다.
 - 실제 사용자 이슈는 열려 있지 않고 열린 항목은 Dependabot PR이다.
 - `dev`는 기준일에 Chain 1, Manager 22, Wallet 7커밋만큼 `main`보다 뒤였다. 다음 작업 전에 동기화한다.
 - Cold Wallet `main`은 기준일에 branch protection이 없었다. 쓰기 권한을 확보하면 보호 설정을 권장한다.

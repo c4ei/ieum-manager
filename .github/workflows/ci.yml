@@ -35,6 +35,8 @@ jobs:
           IEUM_VOUCHER_CODE_PEPPER: ci-only-voucher-pepper-32-characters-minimum
           IEUM_VOUCHER_ARCHIVE_KEY: ci-only-voucher-archive-key-32-characters-minimum
           IEUM_TRIAL_FINGERPRINT_KEY: ci-only-trial-fingerprint-key-32-characters-minimum
+          NODEMAILER_USER: no-reply@example.test
+          NODEMAILER_PASS: ci-only-mail-password
         run: docker compose config
       - name: Build application images without starting PostgreSQL
         env:
@@ -46,4 +48,6 @@ jobs:
           IEUM_VOUCHER_CODE_PEPPER: ci-only-voucher-pepper-32-characters-minimum
           IEUM_VOUCHER_ARCHIVE_KEY: ci-only-voucher-archive-key-32-characters-minimum
           IEUM_TRIAL_FINGERPRINT_KEY: ci-only-trial-fingerprint-key-32-characters-minimum
+          NODEMAILER_USER: no-reply@example.test
+          NODEMAILER_PASS: ci-only-mail-password
         run: docker compose build manager indexer
