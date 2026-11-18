@@ -548,8 +548,14 @@ function buildAlerts(nodes, chain) {
     const minimum=Math.max(1,Number(config.validatorMinimumSamples)||20);
     (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>0 && v.eligibleBlocks<minimum)
       .forEach(v=>alerts.push({level:'info',message:`검증자 ${v.id} 서명률 표본 부족 (${v.eligibleBlocks}/${minimum} 블록)`}));
-    (chain.validators?.validators || []).filter(v=>v.eligibleBlocks>=minimum && v.signingRatePercent<95)
-      .forEach(v=>alerts.push({level:v.signingRatePercent<80?'critical':'warning',message:`검증자 ${v.id} 서명률 ${v.signingRatePercent.toFixed(2)}%`}));
+    // 인증서에는 2/3 초과 정족수만큼의 서명만 저장되므로 서명률 100%는 기대할 수 없다.
+    // 공정 몫(정족수/검증자 수)의 절반 미만이거나, 서명·생성이 모두 0이면 이상으로 본다.
+    const validators=chain.validators?.validators || [],producers=chain.production?.producerBlocks || {};
+    const quorum=Math.floor(validators.length*2/3)+1,fairShare=validators.length?quorum/validators.length*100:100;
+    validators.filter(v=>v.eligibleBlocks>=minimum).forEach(v=>{
+      if (v.signedBlocks===0 && !(producers[v.id]>0)) alerts.push({level:'critical',message:`검증자 ${v.id} 최근 서명·블록 생성 없음`});
+      else if (v.signingRatePercent<fairShare/2) alerts.push({level:'warning',message:`검증자 ${v.id} 서명 참여 낮음 ${v.signingRatePercent.toFixed(2)}% (정상 기준 약 ${fairShare.toFixed(0)}%)`});
+    });
     if (!chain.production?.eventDriven && chain.production?.intervalSamples>0 && chain.production.averageBlockTimeSeconds>6) alerts.push({level:'warning',message:`평균 블록 생성 시간이 ${chain.production.averageBlockTimeSeconds.toFixed(2)}초입니다.`});
   }
   return alerts;
