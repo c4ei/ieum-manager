@@ -8,8 +8,9 @@ IEUM Chain 1.0.17.0(프로토콜 v6)의 잠긴 적립 거래와 계정 동결·�
 - AAH 로그인 계정마다, 주소마다 KST 하루 1회입니다(`ieum_accrual_checkins` 고유 인덱스).
 - 운영 지갑이 스테이킹 시스템 주소로 `value=적립액`, `data="accrue:0x받는주소"` 거래를 보냅니다.
   받는 주소에는 보낼 수 없는 잠긴 적립으로만 쌓이고, 100 IEUM이 되면 노드 담보로 인정됩니다.
-- 한 주소의 하루 적립은 노드 적립과 합쳐 0.3 IEUM까지이며 체인이 강제합니다. 체인이 거절하면 기록을 지워 다시 시도할 수 있습니다.
-- 금액: `IEUM_CHECKIN_ACCRUAL_WEI`(기본 0.1 IEUM, `0`이면 끔).
+- 웹 보상(출석·미션)은 주소당 하루 합계 `IEUM_WEB_ACCRUAL_DAILY_CAP_WEI`(기본 0.01 IEUM)까지입니다(Manager가 확인).
+- 노드 적립을 포함한 체인 한도는 주소당 하루 0.3 IEUM이며 체인이 강제합니다. 체인이 거절하면 기록을 지워 다시 시도할 수 있습니다.
+- 금액: `IEUM_CHECKIN_ACCRUAL_WEI`(기본 0.001 IEUM, `0`이면 끔). 출석은 작은 보너스이고, 담보의 주된 경로는 노드 적립(하루 최대 0.3)입니다.
 - 진행 막대 API(로그인 불필요): `GET /api/rewards/accrual?address=0x...`
 
 ## 2. 사고 대응 `/admin/incidents`

@@ -4,7 +4,7 @@ async function api(path,options={}){const r=await fetch(path,{credentials:'same-
 const remember=v=>{try{localStorage.setItem('ieum-checkin-address',v);}catch{}};
 try{$('address').value=localStorage.getItem('ieum-checkin-address')||'';}catch{}
 async function showStatus(){const address=$('address').value.trim();if(!valid(address)){$('message').textContent='0x로 시작하는 42자리 주소를 넣어 주세요.';return;}remember(address);
-  const d=await api(`/api/rewards/accrual?address=${address}`);$('amount').textContent=d.checkin.amount;$('checkin').disabled=!d.checkin.enabled;$('status').hidden=false;
+  const d=await api(`/api/rewards/accrual?address=${address}`);$('amount').textContent=d.checkin.amount;$('web-cap').textContent=d.checkin.webDailyCap;$('checkin').disabled=!d.checkin.enabled;$('status').hidden=false;
   if(!d.accrual){$('freeze').textContent='체인 적립 정보를 불러오지 못했어요.';return;}const a=d.accrual;
   $('bar').style.width=`${Math.min(a.percent,100)}%`;$('bond').textContent=`${a.bond} IEUM (${a.percent}%)`;$('remaining').textContent=`${a.remaining} IEUM`;$('today').textContent=`${a.todayUsed} / ${a.dailyCap}`;$('days').textContent=a.bonded?'완료':`${a.minimumDays}일`;
   $('freeze').innerHTML=d.freeze?.frozen?'<span class="frozen">이 주소는 보안 사고로 동결되어 있어요.</span>':a.bonded?'<span class="ok">담보를 모두 채웠어요. 노드를 이 주소로 연결하면 보상을 받아요.</span>':`잠긴 적립 ${esc(a.locked)} IEUM 포함`;}

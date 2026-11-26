@@ -34,3 +34,12 @@ test('host agent only accepts known actions and keeps events in every node',asyn
   const agent=await readFile(new URL('../deploy/ieum-recovery-agent.sh',import.meta.url),'utf8');
   assert.match(agent,/\('restart-ieum-nodes','chain-event'\)/);assert.match(agent,/적용 실패, 되돌림/);
 });
+test('web rewards are capped per address per day below the chain cap',async()=>{
+  const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
+  assert.match(source,/IEUM_WEB_ACCRUAL_DAILY_CAP_WEI\?\?'10000000000000000'/);
+  assert.match(source,/todayWeb>webAccrualDailyCapWei/);
+});
+test('admin incident page shows the chain accrual overview',async()=>{
+  const [source,page]=await Promise.all([readFile(new URL('../server.js',import.meta.url),'utf8'),readFile(new URL('../public/incidents-admin.js',import.meta.url),'utf8')]);
+  assert.match(source,/'\/api\/admin\/accrual-overview'.*ieum_accrualOverview/);assert.match(page,/노드 적립 현황|accrual-overview/);
+});

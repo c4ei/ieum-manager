@@ -58,7 +58,9 @@ const trialMailer=createTrialMailer();
 const trialEmailVerificationMinutes=Math.min(Math.max(Number(process.env.IEUM_TRIAL_EMAIL_VERIFICATION_MINUTES)||1440,15),10080);
 let voucherPayout=Promise.resolve();
 // 출석 적립 1회 금액(wei). 0이면 출석 적립을 끕니다. 하루 0.3 IEUM 한도는 체인이 노드 적립과 함께 지킵니다.
-const checkinAccrualWei=(()=>{try{const value=BigInt(process.env.IEUM_CHECKIN_ACCRUAL_WEI??'100000000000000000');return value>=0n&&value<=ACCRUAL_DAILY_CAP_WEI?value:0n;}catch{return 0n;}})();
+const checkinAccrualWei=(()=>{try{const value=BigInt(process.env.IEUM_CHECKIN_ACCRUAL_WEI??'1000000000000000');return value>=0n&&value<=ACCRUAL_DAILY_CAP_WEI?value:0n;}catch{return 0n;}})();
+// 웹 보상(출석·미션)으로 한 주소에 넣는 하루 합계 상한(기본 0.01 IEUM). 노드 적립은 체인 한도 0.3을 따로 씁니다.
+const webAccrualDailyCapWei=(()=>{try{const value=BigInt(process.env.IEUM_WEB_ACCRUAL_DAILY_CAP_WEI??'10000000000000000');return value>0n&&value<=ACCRUAL_DAILY_CAP_WEI?value:10000000000000000n;}catch{return 10000000000000000n;}})();
 // 같은 운영 지갑을 쓰는 상품권·체험·출석 적립이 nonce를 겹치지 않게 예약합니다.
 const PAYOUT_NONCE_SQL='SELECT greatest(coalesce((SELECT max(payout_nonce) FROM ieum_vouchers),-1),coalesce((SELECT max(payout_nonce) FROM ieum_trial_claims),-1),coalesce((SELECT max(payout_nonce) FROM ieum_accrual_checkins),-1))::text AS nonce';
 
@@ -212,6 +214,7 @@ async function adminApi(req,res,url){
     await mkdir(recoveryControlDir,{recursive:true});const id=randomUUID(),request={id,action:'restart-ieum-nodes',requestedAt:new Date().toISOString(),requestedBy:aahAdmin(req)?.email||requestIp(req),token:recoveryControlToken,diagnostics:data.diagnostics};const temp=join(recoveryControlDir,`.${id}.tmp`),target=join(recoveryControlDir,`${id}.json`);await writeFile(temp,JSON.stringify(request,null,2),{mode:0o600});await rename(temp,target);await audit({action:'chain-recovery-requested',ip,id,pending:data.diagnostics.pendingTotal});return json(res,202,{queued:true,id,warning:data.diagnostics.pendingTotal>0?'대기 거래가 재시작으로 사라질 수 있습니다.':null});
   }
   if(req.method==='GET'&&url.pathname==='/api/admin/incidents'){await syncIncidentRequests();const rows=(await query('SELECT id,kind,case_id,event,status,requested_by,result,created_at,updated_at FROM ieum_incident_requests ORDER BY created_at DESC LIMIT 100')).rows;return json(res,200,{enabled:incidentAgentReady(),requests:rows,checkin:{enabled:checkinEnabled(),amount:formatVoucherAmount(checkinAccrualWei)},noticeSeconds:7*86400,freezeSeconds:30*86400});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/accrual-overview'){const d=(await rpc(voucherRpcUrl,'ieum_accrualOverview',[])).result;return json(res,200,{...d,totalLocked:formatVoucherAmount(d.totalLocked),top:(d.top||[]).map(row=>({...row,amount:formatVoucherAmount(row.amount)}))});}
   if(req.method==='GET'&&url.pathname==='/api/admin/incidents/address'){const address=String(url.searchParams.get('address')||'').trim();if(!validAddress(address))return json(res,400,{error:'0x로 시작하는 올바른 주소를 입력하세요.'});return json(res,200,await chainAccountView(address));}
   if(req.method==='POST'&&url.pathname==='/api/admin/incidents'){
     if(!incidentAgentReady())return json(res,503,{error:'호스트 복구 에이전트(IEUM_RECOVERY_CONTROL_TOKEN)가 설정되지 않았습니다.'});
@@ -408,6 +411,8 @@ async function payCheckin(identity,address,ip){
       await client.query('SELECT pg_advisory_lock($1)',[210040006]);
       try{await client.query('INSERT INTO ieum_accrual_checkins(id,user_id,address,kst_date,amount_wei,status) VALUES($1,$2,$3,$4,$5,$6)',[id,identity,target,today,checkinAccrualWei.toString(),'paying']);}
       catch(error){if(error.code==='23505')throw new Error('오늘은 이미 출석했어요. 내일 다시 와 주세요.');throw error;}
+      const todayWeb=BigInt((await client.query('SELECT coalesce(sum(amount_wei),0)::text AS total FROM ieum_accrual_checkins WHERE address=$1 AND kst_date=$2',[target,today])).rows[0].total);
+      if(todayWeb>webAccrualDailyCapWei){await client.query('DELETE FROM ieum_accrual_checkins WHERE id=$1',[id]);throw new Error(`웹 보상은 주소당 하루 ${formatVoucherAmount(webAccrualDailyCapWei)} IEUM까지예요. 내일 다시 와 주세요.`);}
       const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey);
       const chainNonce=await provider.getTransactionCount(wallet.address,'pending'),reserved=Number((await client.query(PAYOUT_NONCE_SQL)).rows[0].nonce)+1;
       signed=await buildAccrualGrant(voucherPrivateKey,{nonce:Math.max(chainNonce,reserved),recipient:target,value:checkinAccrualWei});
@@ -432,7 +437,7 @@ async function confirmCheckins(identity){
 
 async function rewardApi(req,res,url){
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
-  if(req.method==='GET'&&url.pathname==='/api/rewards/accrual'){const address=String(url.searchParams.get('address')||'').trim();if(!validAddress(address))return json(res,400,{error:'0x로 시작하는 올바른 지갑 주소를 입력하세요.'});return json(res,200,{...await chainAccountView(address),checkin:{enabled:checkinEnabled(),amount:formatVoucherAmount(checkinAccrualWei)}});}
+  if(req.method==='GET'&&url.pathname==='/api/rewards/accrual'){const address=String(url.searchParams.get('address')||'').trim();if(!validAddress(address))return json(res,400,{error:'0x로 시작하는 올바른 지갑 주소를 입력하세요.'});return json(res,200,{...await chainAccountView(address),checkin:{enabled:checkinEnabled(),amount:formatVoucherAmount(checkinAccrualWei),webDailyCap:formatVoucherAmount(webAccrualDailyCapWei)}});}
   const user=aahUser(req);if(!user)return json(res,401,{error:'AAH 로그인이 필요합니다.'});
   if(req.method==='GET'&&url.pathname==='/api/rewards/checkin/me'){const identity=String(user.email||user.username||user.sub);await confirmCheckins(identity);const rows=(await query('SELECT kst_date::text,address,amount_wei::text,status,payout_hash,created_at FROM ieum_accrual_checkins WHERE user_id=$1 ORDER BY kst_date DESC LIMIT 30',[identity])).rows;return json(res,200,{today:kstDate(),items:rows.map(row=>({date:row.kst_date,address:row.address,amount:formatVoucherAmount(row.amount_wei),status:row.status,txHash:row.payout_hash,createdAt:row.created_at}))});}
   if(req.method==='POST'&&url.pathname==='/api/rewards/checkin'){const input=await readJson(req);return json(res,200,await payCheckin(String(user.email||user.username||user.sub),String(input.address||'').trim(),requestIp(req)));}
