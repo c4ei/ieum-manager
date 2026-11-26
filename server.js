@@ -390,7 +390,7 @@ async function chainAccountView(address){
   const call=async(method,params)=>{try{return (await rpc(voucherRpcUrl,method,params)).result;}catch(error){return {error:error.message};}};
   const [balance,accrual,freeze]=await Promise.all([call('eth_getBalance',[target,'latest']),call('ieum_accrualStatus',[target]),call('ieum_freezeStatus',[target])]);
   view.balance=typeof balance==='string'?formatVoucherAmount(hexToBigInt(balance)):null;
-  view.accrual=accrual?.error?null:{active:accrual.active,locked:formatVoucherAmount(accrual.locked),bond:formatVoucherAmount(accrual.bond),required:formatVoucherAmount(accrual.bondRequired),remaining:formatVoucherAmount(accrual.remaining),todayUsed:formatVoucherAmount(accrual.todayUsed??0),dailyCap:formatVoucherAmount(accrual.dailyCap),minimumDays:accrual.minimumDaysToBond,bonded:accrual.bonded,percent:Number(BigInt(accrual.bond)*10000n/BigInt(accrual.bondRequired))/100};
+  view.accrual=accrual?.error?null:{active:accrual.active,locked:formatVoucherAmount(accrual.locked),bond:formatVoucherAmount(accrual.bond),required:formatVoucherAmount(accrual.bondRequired),remaining:formatVoucherAmount(accrual.remaining),todayUsed:formatVoucherAmount(accrual.todayUsed??0),dailyCap:formatVoucherAmount(accrual.dailyCap),minimumDays:accrual.minimumDaysToBond,bonded:accrual.bonded,percent:Number(BigInt(accrual.bond)*1000000n/BigInt(accrual.bondRequired))/10000};
   view.freeze=freeze?.error?null:freeze;
   return view;
 }

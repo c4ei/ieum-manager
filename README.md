@@ -1,4 +1,9 @@
-# IEUM Manager 1.0.0.20
+# IEUM Manager 1.0.0.21
+
+출석 진행 막대의 작은 적립 표시 개선과 사고 대응 호스트 에이전트 설치 순서는
+[`docs/VERSION_1.0.0.21_PROGRESS_AGENT.md`](docs/VERSION_1.0.0.21_PROGRESS_AGENT.md)를 참고하세요.
+
+## 이전 1.0.0.20
 
 출석 적립 기본 0.001 IEUM, 웹 보상 주소당 하루 0.01 IEUM 상한, 관리자 노드 적립 현황은
 [`docs/VERSION_1.0.0.20_ACCRUAL_LIMITS.md`](docs/VERSION_1.0.0.20_ACCRUAL_LIMITS.md)를 참고하세요.

@@ -43,3 +43,7 @@ test('admin incident page shows the chain accrual overview',async()=>{
   const [source,page]=await Promise.all([readFile(new URL('../server.js',import.meta.url),'utf8'),readFile(new URL('../public/incidents-admin.js',import.meta.url),'utf8')]);
   assert.match(source,/'\/api\/admin\/accrual-overview'.*ieum_accrualOverview/);assert.match(page,/노드 적립 현황|accrual-overview/);
 });
+test('tiny accrual is shown as an amount and a visible bar, not 0%',async()=>{
+  const page=await readFile(new URL('../public/checkin.js',import.meta.url),'utf8');
+  assert.match(page,/0\.01% 미만/);assert.match(page,/max\(4px/);
+});
