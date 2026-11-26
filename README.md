@@ -1,4 +1,10 @@
-# IEUM Manager 1.0.0.18
+# IEUM Manager 1.0.0.19
+
+매일 출석 적립(`/checkin`)과 관리자 사고 대응·동결/복구 화면(`/admin/incidents`)은
+[`docs/VERSION_1.0.0.19_ACCRUAL_INCIDENTS.md`](docs/VERSION_1.0.0.19_ACCRUAL_INCIDENTS.md)를 참고하세요.
+IEUM Chain 1.0.17.0 이상과 프로토콜 v6 활성화가 필요합니다.
+
+## 이전 1.0.0.18
 
 체험 지급 이메일 확인, IP·국가 기록, 분리된 마케팅 동의와 고객 타기팅·설문 관리는
 [`docs/VERSION_1.0.0.18_TRIAL_EMAIL_AUDIENCE.md`](docs/VERSION_1.0.0.18_TRIAL_EMAIL_AUDIENCE.md)를 참고하세요.

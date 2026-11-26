@@ -1,0 +1,6 @@
+.progress{height:18px;border-radius:9px;background:#102f33;overflow:hidden;margin:12px 0}.progress i{display:block;height:100%;background:linear-gradient(90deg,#147c62,#54e6ba);transition:width .4s}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.stat-row span{padding:12px;background:#102f33;border-radius:10px}.stat-row b{display:block;font-size:1.2em;margin-top:4px}
+.frozen{color:#ffce72;font-weight:700}.ok{color:#54e6ba}.muted{color:#9fbab3;font-size:.92em}.steps{line-height:1.8}.steps li{margin:4px 0}
+.kind-tabs{display:flex;gap:8px;flex-wrap:wrap}.kind-tabs button{background:#102f33}.kind-tabs button[aria-pressed=true]{background:#168866;border-color:#54e6ba}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 200px}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #26584e;text-align:left;font-size:.92em;word-break:break-all}
+.badge{padding:3px 8px;border-radius:6px;background:#102f33}.badge.applied{background:#147c62}.badge.rejected{background:#7a3b1d}

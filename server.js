@@ -15,6 +15,7 @@ import {diagnoseNodes} from './lib/chain-health.js';
 import {buildVoucherPayout,createVoucherSecrets,isPayoutHash,formatVoucherAmount,inspectVoucherPayout,parseVoucherAmount,validVoucherAddress,voucherCodeMatches,voucherDigest} from './lib/vouchers.js';
 import {decryptVoucherSecret,encryptVoucherSecret} from './lib/voucher-archive.js';
 import {jwtAdmin,jwtUser} from './lib/admin-auth.js';
+import {ACCRUAL_DAILY_CAP_WEI,buildAccrualGrant,buildIncidentEvent,incidentConfirmation,kstDate} from './lib/accrual.js';
 import {createTrialMailer,createVerificationToken,emailDigest,normalizeEmail,validEmail,verificationDigest} from './lib/trial-email.js';
 
 const root = new URL('.', import.meta.url).pathname;
@@ -56,6 +57,10 @@ const turnstileSiteKey=process.env.IEUM_TURNSTILE_SITE_KEY||'';
 const trialMailer=createTrialMailer();
 const trialEmailVerificationMinutes=Math.min(Math.max(Number(process.env.IEUM_TRIAL_EMAIL_VERIFICATION_MINUTES)||1440,15),10080);
 let voucherPayout=Promise.resolve();
+// 출석 적립 1회 금액(wei). 0이면 출석 적립을 끕니다. 하루 0.3 IEUM 한도는 체인이 노드 적립과 함께 지킵니다.
+const checkinAccrualWei=(()=>{try{const value=BigInt(process.env.IEUM_CHECKIN_ACCRUAL_WEI??'100000000000000000');return value>=0n&&value<=ACCRUAL_DAILY_CAP_WEI?value:0n;}catch{return 0n;}})();
+// 같은 운영 지갑을 쓰는 상품권·체험·출석 적립이 nonce를 겹치지 않게 예약합니다.
+const PAYOUT_NONCE_SQL='SELECT greatest(coalesce((SELECT max(payout_nonce) FROM ieum_vouchers),-1),coalesce((SELECT max(payout_nonce) FROM ieum_trial_claims),-1),coalesce((SELECT max(payout_nonce) FROM ieum_accrual_checkins),-1))::text AS nonce';
 
 const trialHash=value=>createHmac('sha256',trialFingerprintKey).update(String(value||'')).digest('hex');
 const requestCountry=req=>{if(process.env.IEUM_MANAGER_TRUST_PROXY!=='1')return null;const value=String(req.headers['cf-ipcountry']||'').toUpperCase();return /^[A-Z]{2}$/.test(value)&&value!=='XX'&&value!=='T1'?value:null;};
@@ -117,6 +122,19 @@ async function verifyTurnstile(token,ip){
 }
 const trialPublicId=()=>randomUUID().replaceAll('-','').slice(0,12).toUpperCase();
 const trialView=row=>({publicId:row.public_id,name:row.name,status:row.status,reward:formatVoucherAmount(row.reward_wei),budget:formatVoucherAmount(row.budget_wei),spent:formatVoucherAmount(row.spent_wei),remaining:formatVoucherAmount(BigInt(row.budget_wei)-BigInt(row.spent_wei)),startsAt:row.starts_at,endsAt:row.ends_at,ipDailyLimit:row.ip_daily_limit,deviceDailyLimit:row.device_daily_limit,burstLimit:row.burst_limit,minimumWaitSeconds:row.minimum_wait_seconds,captchaRequired:row.captcha_required});
+
+const incidentAgentReady=()=>Boolean(recoveryControlDir&&recoveryControlToken.length>=32);
+
+// 호스트 에이전트가 처리한 요청 파일(processed/completed-*, rejected-*)로 상태를 맞춥니다.
+async function syncIncidentRequests(){
+  if(!recoveryControlDir)return;
+  const rows=(await query("SELECT id FROM ieum_incident_requests WHERE status='queued' ORDER BY created_at DESC LIMIT 50")).rows;
+  for(const row of rows){
+    for(const [prefix,status] of [['completed','applied'],['rejected','rejected']]){
+      try{const text=await readFile(join(recoveryControlDir,'processed',`${prefix}-${row.id}.json`),'utf8');const item=JSON.parse(text);await query('UPDATE ieum_incident_requests SET status=$2,result=$3,updated_at=now() WHERE id=$1',[row.id,status,String(item.result||status).slice(0,500)]);break;}catch{}
+    }
+  }
+}
 
 async function adminApi(req,res,url){
   const ip=requestIp(req);if(!adminAuthorized(req)){await audit({action:'auth-failed',ip});return json(res,401,{error:'관리자 인증이 필요합니다.'});}
@@ -192,6 +210,19 @@ async function adminApi(req,res,url){
     if(data.diagnostics.status!=='critical')return json(res,409,{error:'현재 자동 진단이 위험 상태가 아니므로 재시작을 요청하지 않습니다.'});
     if(data.diagnostics.pendingTotal>0&&input.acceptPendingLoss!==true)return json(res,409,{error:'대기 거래가 있습니다. 손실 가능성을 명시적으로 확인해야 합니다.',pending:data.diagnostics.pendingTotal});
     await mkdir(recoveryControlDir,{recursive:true});const id=randomUUID(),request={id,action:'restart-ieum-nodes',requestedAt:new Date().toISOString(),requestedBy:aahAdmin(req)?.email||requestIp(req),token:recoveryControlToken,diagnostics:data.diagnostics};const temp=join(recoveryControlDir,`.${id}.tmp`),target=join(recoveryControlDir,`${id}.json`);await writeFile(temp,JSON.stringify(request,null,2),{mode:0o600});await rename(temp,target);await audit({action:'chain-recovery-requested',ip,id,pending:data.diagnostics.pendingTotal});return json(res,202,{queued:true,id,warning:data.diagnostics.pendingTotal>0?'대기 거래가 재시작으로 사라질 수 있습니다.':null});
+  }
+  if(req.method==='GET'&&url.pathname==='/api/admin/incidents'){await syncIncidentRequests();const rows=(await query('SELECT id,kind,case_id,event,status,requested_by,result,created_at,updated_at FROM ieum_incident_requests ORDER BY created_at DESC LIMIT 100')).rows;return json(res,200,{enabled:incidentAgentReady(),requests:rows,checkin:{enabled:checkinEnabled(),amount:formatVoucherAmount(checkinAccrualWei)},noticeSeconds:7*86400,freezeSeconds:30*86400});}
+  if(req.method==='GET'&&url.pathname==='/api/admin/incidents/address'){const address=String(url.searchParams.get('address')||'').trim();if(!validAddress(address))return json(res,400,{error:'0x로 시작하는 올바른 주소를 입력하세요.'});return json(res,200,await chainAccountView(address));}
+  if(req.method==='POST'&&url.pathname==='/api/admin/incidents'){
+    if(!incidentAgentReady())return json(res,503,{error:'호스트 복구 에이전트(IEUM_RECOVERY_CONTROL_TOKEN)가 설정되지 않았습니다.'});
+    const input=await readJson(req),event=buildIncidentEvent(input),expected=incidentConfirmation(input.kind,event.action.case_id);
+    if(String(input.confirmation||'').trim()!==expected)return json(res,400,{error:`확인 문구로 "${expected}"를 정확히 입력하세요.`});
+    if(event.action.type==='account_recovery'){const view=await chainAccountView(event.action.from);if(!view.freeze?.frozen||view.freeze.caseId!==event.action.case_id)return json(res,409,{error:'이 사건 ID로 동결된 주소가 아닙니다.'});if(Date.now()/1000<view.freeze.recoverableAfter)return json(res,409,{error:`공개 유예가 끝나지 않았습니다. ${new Date(view.freeze.recoverableAfter*1000).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})} 이후 복구할 수 있습니다.`});}
+    const id=randomUUID(),actor=aahAdmin(req)?.email||'emergency-token';
+    await query('INSERT INTO ieum_incident_requests(id,kind,case_id,event,status,requested_by) VALUES($1,$2,$3,$4,$5,$6)',[id,input.kind,event.action.case_id,JSON.stringify(event),'queued',actor]);
+    await mkdir(recoveryControlDir,{recursive:true});const request={id,action:'chain-event',requestedAt:new Date().toISOString(),requestedBy:actor,token:recoveryControlToken,event},temp=join(recoveryControlDir,`.${id}.tmp`);await writeFile(temp,JSON.stringify(request,null,2),{mode:0o600});await rename(temp,join(recoveryControlDir,`${id}.json`));
+    await audit({action:'incident-requested',ip,id,kind:input.kind,caseId:event.action.case_id,actor});
+    return json(res,202,{queued:true,id,event,message:'호스트 에이전트가 15초 안에 네 노드 events.json에 넣고, 노드가 5초 안에 반영합니다.'});
   }
   if(req.method==='GET'&&url.pathname==='/api/admin/events')return json(res,200,{items:await recentAudit(url.searchParams.get('limit'))});
   if(req.method==='GET'&&url.pathname==='/api/admin/reward-campaigns'){
@@ -348,9 +379,63 @@ async function guildApi(req,res,url){
   return json(res,404,{error:'길드 API를 찾을 수 없습니다.'});
 }
 
+const checkinEnabled=()=>checkinAccrualWei>0n&&Boolean(voucherPrivateKey&&voucherRpcUrl);
+
+// 지갑·출석 화면과 관리자 사고 대응 화면이 함께 쓰는 체인 계정 조회입니다.
+async function chainAccountView(address){
+  const target=address.toLowerCase(),view={address:target};
+  const call=async(method,params)=>{try{return (await rpc(voucherRpcUrl,method,params)).result;}catch(error){return {error:error.message};}};
+  const [balance,accrual,freeze]=await Promise.all([call('eth_getBalance',[target,'latest']),call('ieum_accrualStatus',[target]),call('ieum_freezeStatus',[target])]);
+  view.balance=typeof balance==='string'?formatVoucherAmount(hexToBigInt(balance)):null;
+  view.accrual=accrual?.error?null:{active:accrual.active,locked:formatVoucherAmount(accrual.locked),bond:formatVoucherAmount(accrual.bond),required:formatVoucherAmount(accrual.bondRequired),remaining:formatVoucherAmount(accrual.remaining),todayUsed:formatVoucherAmount(accrual.todayUsed??0),dailyCap:formatVoucherAmount(accrual.dailyCap),minimumDays:accrual.minimumDaysToBond,bonded:accrual.bonded,percent:Number(BigInt(accrual.bond)*10000n/BigInt(accrual.bondRequired))/100};
+  view.freeze=freeze?.error?null:freeze;
+  return view;
+}
+
+const uncertainSend=error=>error?.name==='AbortError'||/^HTTP |fetch failed|ECONN|timeout/i.test(String(error?.message||''));
+
+// 하루 1회 출석 적립. 같은 계정·같은 주소는 KST 하루 한 번만 기록하고, 체인이 거절하면 기록을 지워 다시 시도할 수 있게 합니다.
+async function payCheckin(identity,address,ip){
+  if(!checkinEnabled())throw new Error('출석 적립이 아직 열리지 않았습니다.');
+  if(!validVoucherAddress(address))throw new Error('0x로 시작하는 올바른 IEUM 지갑 주소를 입력하세요.');
+  const target=address.toLowerCase(),today=kstDate(),view=await chainAccountView(target);
+  if(view.freeze?.frozen)throw new Error('동결된 주소에는 적립할 수 없습니다.');
+  if(!view.accrual)throw new Error('체인 적립 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.');
+  if(view.accrual.bonded)throw new Error('이미 담보 100 IEUM을 모두 채웠어요. 노드 보상을 받고 있는지 확인하세요.');
+  const run=async()=>{
+    const client=await pool.connect(),id=randomUUID();let signed;
+    try{
+      await client.query('SELECT pg_advisory_lock($1)',[210040006]);
+      try{await client.query('INSERT INTO ieum_accrual_checkins(id,user_id,address,kst_date,amount_wei,status) VALUES($1,$2,$3,$4,$5,$6)',[id,identity,target,today,checkinAccrualWei.toString(),'paying']);}
+      catch(error){if(error.code==='23505')throw new Error('오늘은 이미 출석했어요. 내일 다시 와 주세요.');throw error;}
+      const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey);
+      const chainNonce=await provider.getTransactionCount(wallet.address,'pending'),reserved=Number((await client.query(PAYOUT_NONCE_SQL)).rows[0].nonce)+1;
+      signed=await buildAccrualGrant(voucherPrivateKey,{nonce:Math.max(chainNonce,reserved),recipient:target,value:checkinAccrualWei});
+      await client.query('UPDATE ieum_accrual_checkins SET payout_nonce=$2,payout_raw_tx=$3,payout_hash=$4,updated_at=now() WHERE id=$1',[id,signed.nonce,signed.raw,signed.hash]);
+      try{await rpc(voucherRpcUrl,'eth_sendRawTransaction',[signed.raw]);}
+      catch(error){
+        if(uncertainSend(error)){await client.query("UPDATE ieum_accrual_checkins SET status='uncertain',last_error=$2,updated_at=now() WHERE id=$1",[id,String(error.message).slice(0,500)]);throw new Error(`적립 거래 상태가 불확실합니다. 거래 ${signed.hash}를 확인해 주세요.`);}
+        await client.query('DELETE FROM ieum_accrual_checkins WHERE id=$1',[id]);throw new Error(`체인이 적립을 거절했습니다: ${error.message}`);
+      }
+      await client.query("UPDATE ieum_accrual_checkins SET status='sent',updated_at=now() WHERE id=$1",[id]);
+      await audit({action:'accrual-checkin-sent',ip,userId:identity,address:target,txHash:signed.hash,nonce:signed.nonce});
+      return {ok:true,date:today,amount:formatVoucherAmount(checkinAccrualWei),txHash:signed.hash,explorerUrl:`${voucherExplorerUrl}${signed.hash}`,message:`${formatVoucherAmount(checkinAccrualWei)} IEUM이 잠긴 적립으로 들어갑니다. 1~2블록 뒤 진행 막대에 반영돼요.`};
+    }finally{await client.query('SELECT pg_advisory_unlock($1)',[210040006]).catch(()=>{});client.release();}
+  };
+  const payout=voucherPayout.then(run,run);voucherPayout=payout.catch(()=>{});return payout;
+}
+
+async function confirmCheckins(identity){
+  const rows=(await query("SELECT id,payout_hash FROM ieum_accrual_checkins WHERE user_id=$1 AND status='sent' AND payout_hash IS NOT NULL LIMIT 10",[identity])).rows;
+  for(const row of rows){try{const receipt=(await rpc(voucherRpcUrl,'eth_getTransactionReceipt',[row.payout_hash])).result;if(receipt)await query("UPDATE ieum_accrual_checkins SET status='confirmed',updated_at=now() WHERE id=$1",[row.id]);}catch{}}
+}
+
 async function rewardApi(req,res,url){
   if(!sameOrigin(req))return json(res,403,{error:'허용되지 않은 Origin입니다.'});
+  if(req.method==='GET'&&url.pathname==='/api/rewards/accrual'){const address=String(url.searchParams.get('address')||'').trim();if(!validAddress(address))return json(res,400,{error:'0x로 시작하는 올바른 지갑 주소를 입력하세요.'});return json(res,200,{...await chainAccountView(address),checkin:{enabled:checkinEnabled(),amount:formatVoucherAmount(checkinAccrualWei)}});}
   const user=aahUser(req);if(!user)return json(res,401,{error:'AAH 로그인이 필요합니다.'});
+  if(req.method==='GET'&&url.pathname==='/api/rewards/checkin/me'){const identity=String(user.email||user.username||user.sub);await confirmCheckins(identity);const rows=(await query('SELECT kst_date::text,address,amount_wei::text,status,payout_hash,created_at FROM ieum_accrual_checkins WHERE user_id=$1 ORDER BY kst_date DESC LIMIT 30',[identity])).rows;return json(res,200,{today:kstDate(),items:rows.map(row=>({date:row.kst_date,address:row.address,amount:formatVoucherAmount(row.amount_wei),status:row.status,txHash:row.payout_hash,createdAt:row.created_at}))});}
+  if(req.method==='POST'&&url.pathname==='/api/rewards/checkin'){const input=await readJson(req);return json(res,200,await payCheckin(String(user.email||user.username||user.sub),String(input.address||'').trim(),requestIp(req)));}
   if(req.method==='POST'&&url.pathname==='/api/rewards/sns-claims'){
     if(!String(req.headers['content-type']||'').startsWith('application/json'))return json(res,415,{error:'application/json만 허용합니다.'});
     const policy=await loadPolicy(),identity=String(user.email||user.username||user.sub);let claim=sanitizeSnsClaim(await readJson(req),{userId:identity,ip:requestIp(req)});assertSnsClaimUnique(claim,policy.snsClaims||[]);claim=await verifySnsClaim(claim);
@@ -412,14 +497,14 @@ async function voucherPublicApi(req,res,url){
   if(action==='status'&&req.method==='GET')return json(res,200,{publicId,amount:formatVoucherAmount(voucher.amount_wei),status,expiresAt:voucher.expires_at,claimedAt:voucher.claimed_at,txHash:voucher.payout_tx_hash,explorerUrl:voucher.payout_tx_hash?`${voucherExplorerUrl}${voucher.payout_tx_hash}`:null});
   if(action==='claim'&&req.method==='POST'){
     const input=await readJson(req),address=String(input.address||'').trim(),code=String(input.code||'');if(!validVoucherAddress(address))return json(res,400,{error:'0x로 시작하는 올바른 IEUM 주소를 입력하세요.'});if(!voucherCodeMatches(code,voucher.code_hash,voucherPepper)){await query('UPDATE ieum_vouchers SET claim_attempts=claim_attempts+1,updated_at=now() WHERE id=$1',[voucher.id]);return json(res,400,{error:'교환번호가 올바르지 않습니다.'});}
-    const run=async()=>{if(!voucherPrivateKey||!voucherRpcUrl)throw new Error('상품권 지급 지갑이 아직 설정되지 않았습니다.');const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey),client=await pool.connect();let raw='',expectedHash='',nonce=0;try{await client.query('SELECT pg_advisory_lock($1)',[210040006]);await client.query('BEGIN');const locked=(await client.query('SELECT * FROM ieum_vouchers WHERE id=$1 FOR UPDATE',[voucher.id])).rows[0];if(locked.status==='claimed'){await client.query('ROLLBACK');return{already:true,txHash:locked.payout_tx_hash};}if(locked.status!=='issued'||(locked.expires_at&&new Date(locked.expires_at)<=new Date())){await client.query('ROLLBACK');throw new Error('이미 사용·취소·만료되었거나 처리 중인 상품권입니다.');}const chainNonce=await provider.getTransactionCount(wallet.address,'pending'),reserved=(await client.query('SELECT max(payout_nonce)::text AS nonce FROM ieum_vouchers WHERE payout_nonce IS NOT NULL')).rows[0].nonce;nonce=Math.max(chainNonce,reserved===null?chainNonce:Number(reserved)+1);const signed=await buildVoucherPayout(voucherPrivateKey,{nonce,to:address,value:locked.amount_wei});raw=signed.raw;expectedHash=signed.expectedHash;await client.query("UPDATE ieum_vouchers SET status='claiming',claimed_address=$2,payout_nonce=$3,payout_raw_tx=$4,payout_expected_hash=$5,last_error=null,updated_at=now() WHERE id=$1",[voucher.id,address,nonce,raw,expectedHash]);await client.query('COMMIT');let returnedHash;try{returnedHash=(await rpc(voucherRpcUrl,'eth_sendRawTransaction',[raw])).result;}catch(error){await query('UPDATE ieum_vouchers SET last_error=$2,updated_at=now() WHERE id=$1',[voucher.id,String(error.message||error).slice(0,500)]);throw new Error(`지급 거래 상태가 불확실합니다. 예상 거래 ${expectedHash}를 관리자가 확인해야 합니다.`);}if(!isPayoutHash(returnedHash,raw,expectedHash))throw new Error('노드가 반환한 거래 해시가 로컬 서명 해시와 다릅니다.');await query("UPDATE ieum_vouchers SET status='claimed',payout_tx_hash=$2,claimed_at=now(),updated_at=now(),last_error=null WHERE id=$1",[voucher.id,expectedHash]);await audit({action:'voucher-claimed',ip:requestIp(req),publicId,address,txHash:expectedHash,nonce});return{txHash:expectedHash};}catch(error){await client.query('ROLLBACK').catch(()=>{});if(expectedHash)await query('UPDATE ieum_vouchers SET last_error=$2,updated_at=now() WHERE id=$1',[voucher.id,String(error.message||error).slice(0,500)]).catch(()=>{});throw error;}finally{await client.query('SELECT pg_advisory_unlock($1)',[210040006]).catch(()=>{});client.release();}};
+    const run=async()=>{if(!voucherPrivateKey||!voucherRpcUrl)throw new Error('상품권 지급 지갑이 아직 설정되지 않았습니다.');const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey),client=await pool.connect();let raw='',expectedHash='',nonce=0;try{await client.query('SELECT pg_advisory_lock($1)',[210040006]);await client.query('BEGIN');const locked=(await client.query('SELECT * FROM ieum_vouchers WHERE id=$1 FOR UPDATE',[voucher.id])).rows[0];if(locked.status==='claimed'){await client.query('ROLLBACK');return{already:true,txHash:locked.payout_tx_hash};}if(locked.status!=='issued'||(locked.expires_at&&new Date(locked.expires_at)<=new Date())){await client.query('ROLLBACK');throw new Error('이미 사용·취소·만료되었거나 처리 중인 상품권입니다.');}const chainNonce=await provider.getTransactionCount(wallet.address,'pending'),reserved=(await client.query(PAYOUT_NONCE_SQL)).rows[0].nonce;nonce=Math.max(chainNonce,reserved===null?chainNonce:Number(reserved)+1);const signed=await buildVoucherPayout(voucherPrivateKey,{nonce,to:address,value:locked.amount_wei});raw=signed.raw;expectedHash=signed.expectedHash;await client.query("UPDATE ieum_vouchers SET status='claiming',claimed_address=$2,payout_nonce=$3,payout_raw_tx=$4,payout_expected_hash=$5,last_error=null,updated_at=now() WHERE id=$1",[voucher.id,address,nonce,raw,expectedHash]);await client.query('COMMIT');let returnedHash;try{returnedHash=(await rpc(voucherRpcUrl,'eth_sendRawTransaction',[raw])).result;}catch(error){await query('UPDATE ieum_vouchers SET last_error=$2,updated_at=now() WHERE id=$1',[voucher.id,String(error.message||error).slice(0,500)]);throw new Error(`지급 거래 상태가 불확실합니다. 예상 거래 ${expectedHash}를 관리자가 확인해야 합니다.`);}if(!isPayoutHash(returnedHash,raw,expectedHash))throw new Error('노드가 반환한 거래 해시가 로컬 서명 해시와 다릅니다.');await query("UPDATE ieum_vouchers SET status='claimed',payout_tx_hash=$2,claimed_at=now(),updated_at=now(),last_error=null WHERE id=$1",[voucher.id,expectedHash]);await audit({action:'voucher-claimed',ip:requestIp(req),publicId,address,txHash:expectedHash,nonce});return{txHash:expectedHash};}catch(error){await client.query('ROLLBACK').catch(()=>{});if(expectedHash)await query('UPDATE ieum_vouchers SET last_error=$2,updated_at=now() WHERE id=$1',[voucher.id,String(error.message||error).slice(0,500)]).catch(()=>{});throw error;}finally{await client.query('SELECT pg_advisory_unlock($1)',[210040006]).catch(()=>{});client.release();}};
     const payout=voucherPayout.then(run,run);voucherPayout=payout.catch(()=>{});const result=await payout;return json(res,200,{ok:true,already:Boolean(result.already),txHash:result.txHash,explorerUrl:`${voucherExplorerUrl}${result.txHash}`});
   }
   return json(res,405,{error:'허용되지 않은 요청입니다.'});
 }
 
 async function payTrialClaim(claim,campaign,ip){
-  const run=async()=>{if(!voucherPrivateKey||!voucherRpcUrl)throw new Error('체험 지급 지갑이 설정되지 않았습니다.');const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey),client=await pool.connect();let signed;try{await client.query('SELECT pg_advisory_lock($1)',[210040006]);const locked=(await client.query('SELECT * FROM ieum_trial_claims WHERE id=$1',[claim.id])).rows[0];if(locked.status==='paid')return locked.payout_tx_hash;if(locked.status!=='queued')throw new Error('이메일 확인 상태가 지급 가능한 상태가 아닙니다.');const chainNonce=await provider.getTransactionCount(wallet.address,'pending'),nonceRows=await client.query('SELECT greatest(coalesce((SELECT max(payout_nonce) FROM ieum_vouchers),-1),coalesce((SELECT max(payout_nonce) FROM ieum_trial_claims),-1))::text AS nonce'),nonce=Math.max(chainNonce,Number(nonceRows.rows[0].nonce)+1);signed=await buildVoucherPayout(voucherPrivateKey,{nonce,to:locked.address,value:campaign.reward_wei});await client.query("UPDATE ieum_trial_claims SET status='paying',payout_nonce=$2,payout_raw_tx=$3,payout_expected_hash=$4,email_verification_token_hash=null,updated_at=now() WHERE id=$1",[claim.id,nonce,signed.raw,signed.expectedHash]);const returned=(await rpc(voucherRpcUrl,'eth_sendRawTransaction',[signed.raw])).result;if(!isPayoutHash(returned,signed.raw,signed.expectedHash))throw new Error('노드가 반환한 거래 해시가 예상값과 다릅니다.');await client.query("UPDATE ieum_trial_claims SET status='paid',payout_tx_hash=$2,paid_at=now(),updated_at=now() WHERE id=$1",[claim.id,signed.expectedHash]);await audit({action:'trial-paid',ip,publicId:campaign.public_id,address:locked.address,txHash:signed.expectedHash});return signed.expectedHash;}catch(error){await query("UPDATE ieum_trial_claims SET status='failed',last_error=$2,updated_at=now() WHERE id=$1 AND status='paying'",[claim.id,String(error.message||error).slice(0,500)]).catch(()=>{});throw new Error(`지급 상태 확인이 필요합니다. 관리자에게 신청번호 ${claim.id}를 알려주세요.`);}finally{await client.query('SELECT pg_advisory_unlock($1)',[210040006]).catch(()=>{});client.release();}};
+  const run=async()=>{if(!voucherPrivateKey||!voucherRpcUrl)throw new Error('체험 지급 지갑이 설정되지 않았습니다.');const provider=new JsonRpcProvider(voucherRpcUrl,21004,{staticNetwork:true}),wallet=new Wallet(voucherPrivateKey),client=await pool.connect();let signed;try{await client.query('SELECT pg_advisory_lock($1)',[210040006]);const locked=(await client.query('SELECT * FROM ieum_trial_claims WHERE id=$1',[claim.id])).rows[0];if(locked.status==='paid')return locked.payout_tx_hash;if(locked.status!=='queued')throw new Error('이메일 확인 상태가 지급 가능한 상태가 아닙니다.');const chainNonce=await provider.getTransactionCount(wallet.address,'pending'),nonceRows=await client.query(PAYOUT_NONCE_SQL),nonce=Math.max(chainNonce,Number(nonceRows.rows[0].nonce)+1);signed=await buildVoucherPayout(voucherPrivateKey,{nonce,to:locked.address,value:campaign.reward_wei});await client.query("UPDATE ieum_trial_claims SET status='paying',payout_nonce=$2,payout_raw_tx=$3,payout_expected_hash=$4,email_verification_token_hash=null,updated_at=now() WHERE id=$1",[claim.id,nonce,signed.raw,signed.expectedHash]);const returned=(await rpc(voucherRpcUrl,'eth_sendRawTransaction',[signed.raw])).result;if(!isPayoutHash(returned,signed.raw,signed.expectedHash))throw new Error('노드가 반환한 거래 해시가 예상값과 다릅니다.');await client.query("UPDATE ieum_trial_claims SET status='paid',payout_tx_hash=$2,paid_at=now(),updated_at=now() WHERE id=$1",[claim.id,signed.expectedHash]);await audit({action:'trial-paid',ip,publicId:campaign.public_id,address:locked.address,txHash:signed.expectedHash});return signed.expectedHash;}catch(error){await query("UPDATE ieum_trial_claims SET status='failed',last_error=$2,updated_at=now() WHERE id=$1 AND status='paying'",[claim.id,String(error.message||error).slice(0,500)]).catch(()=>{});throw new Error(`지급 상태 확인이 필요합니다. 관리자에게 신청번호 ${claim.id}를 알려주세요.`);}finally{await client.query('SELECT pg_advisory_unlock($1)',[210040006]).catch(()=>{});client.release();}};
   const payout=voucherPayout.then(run,run);voucherPayout=payout.catch(()=>{});return payout;
 }
 
@@ -608,11 +693,13 @@ export const server=http.createServer(async(req,res)=>{
   }
   const pathname = new URL(req.url, 'http://localhost').pathname;
   const detailRoutes=new Set(['/nodes','/validators','/accounts','/transactions','/explorer']);const entityRoute=/^\/(?:tx|address|block)\/[^/]+$/;const adminRoutes=/^\/admin(?:\/dashboard|\/rpc|\/waf|\/blocked|\/audit|\/peers|\/rewards)?$/;
-  const requested = pathname === '/' ? 'index.html' : pathname==='/admin/peers'?'peers.html':pathname==='/admin/vouchers'?'vouchers-admin.html':pathname==='/admin/trial-campaigns'?'trial-campaigns-admin.html':pathname==='/admin/trial-audience'?'trial-audience-admin.html':pathname==='/trial/verify'?'trial-verify.html':/^\/voucher\/[2-9A-HJ-NP-Z]{10}$/.test(pathname)?'voucher.html':/^\/trial\/[A-F0-9]{12}$/.test(pathname)?'trial.html':detailRoutes.has(pathname)||entityRoute.test(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
+  const requested = pathname === '/' ? 'index.html' : pathname==='/admin/peers'?'peers.html':pathname==='/admin/incidents'?'incidents-admin.html':pathname==='/checkin'?'checkin.html':pathname==='/admin/vouchers'?'vouchers-admin.html':pathname==='/admin/trial-campaigns'?'trial-campaigns-admin.html':pathname==='/admin/trial-audience'?'trial-audience-admin.html':pathname==='/trial/verify'?'trial-verify.html':/^\/voucher\/[2-9A-HJ-NP-Z]{10}$/.test(pathname)?'voucher.html':/^\/trial\/[A-F0-9]{12}$/.test(pathname)?'trial.html':detailRoutes.has(pathname)||entityRoute.test(pathname)?'detail.html':adminRoutes.test(pathname)?'admin.html':pathname.replace(/^\//, '');
   const safe=normalize(requested).replace(/^(\.\.(\/|\\|$))+/,''); const path=join(root,'public',safe);
   try{let body=await readFile(path);const contentType=mime[extname(path)]||'application/octet-stream';if(contentType.startsWith('text/html')&&/^\/trial\/[A-F0-9]{12}$/.test(pathname)){const campaign=(await query('SELECT * FROM ieum_trial_campaigns WHERE public_id=$1',[pathname.slice(-12)])).rows[0];let html=body.toString('utf8'),metadata=campaign?trialMetadata(campaign):'<meta name="robots" content="noindex,nofollow">';html=html.replace('</head>',`${metadata}</head>`);if(campaign)html=html.replace('<title>IEUM 첫 체험</title>',`<title>${escapeMeta(campaign.name)} · ${escapeMeta(formatVoucherAmount(campaign.reward_wei))} IEUM 첫 체험</title>`);body=Buffer.from(html);}if(contentType.startsWith('text/html')&&pathname.startsWith('/admin/')){let html=body.toString('utf8');if(!html.includes('/admin-nav.css'))html=html.replace('</head>','<link rel="stylesheet" href="/admin-nav.css?v=10014"></head>');if(!html.includes('/admin-nav.js'))html=html.replace('</body>','<script src="/admin-nav.js?v=10014"></script></body>');body=Buffer.from(html);}res.writeHead(200,{'content-type':contentType,'cache-control':'public, max-age=300'});res.end(body);}
   catch{res.writeHead(404);res.end('Not found');}
 });
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  // 1.0.0.19 테이블이 없으면 상품권·체험 지급의 nonce 예약 쿼리도 실패하므로 시작할 때 멱등 마이그레이션을 적용합니다.
+  readFile(join(root,'db/migrate-1.0.0.19.sql'),'utf8').then(sql=>query(sql)).then(()=>console.log('DB 1.0.0.19 스키마 확인 완료')).catch(error=>console.error(`DB 1.0.0.19 스키마 적용 실패: ${error.message}`));
   server.listen(port,host,()=>console.log(`IEUM Manager listening on http://${host}:${port}`));
 }

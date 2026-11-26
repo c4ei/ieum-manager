@@ -1,0 +1,16 @@
+<!doctype html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IEUM 사고 대응</title><link rel="stylesheet" href="/voucher.css?v=10013"><link rel="stylesheet" href="/trial-campaigns.css?v=10015"><link rel="stylesheet" href="/accrual.css?v=10019"><link rel="stylesheet" href="/admin-nav.css?v=10014"></head><body><main>
+<header><div><a href="/admin/dashboard">← 전체 관리자</a><h1>사고 대응 · 동결/복구</h1><p>해킹 피해가 생기면 해커 주소를 동결하고, 7일 공개 유예 뒤 피해자에게 돌려줍니다.</p></div></header>
+<section class="card"><label>비상 관리자 토큰 (AAH 관리자로 로그인했다면 비워 두세요)<input id="admin-token" type="password"></label><button id="connect" type="button" style="margin-top:10px">인증</button> <span id="agent" class="muted"></span></section>
+<section class="card"><h2>사고가 나면 이 순서로</h2><ol class="steps"><li><b>주소 조회</b>로 피해자에게서 돈이 빠져나간 해커 주소를 확인합니다.</li><li><b>동결</b>: 빠를수록 좋습니다. 다른 체인·거래소로 넘어간 돈은 돌려받을 수 없습니다.</li><li><b>공지</b>: 사건 ID, 동결 주소, 복구 예정일(7일 뒤)을 커뮤니티에 알립니다.</li><li><b>7일 뒤 복구</b>: 피해 금액만큼 피해자에게 돌려줍니다. 화면이 유예 기간을 확인해 줍니다.</li><li><b>정리</b>: 오판이면 해제하고, 그대로 두면 30일 뒤 자동 해제됩니다.</li></ol><p class="muted">공개 사유는 체인에 영구 기록됩니다. 이름·연락처 같은 개인정보는 쓰지 마세요.</p></section>
+<section class="card"><h2>1. 주소 조회</h2><div class="row"><input id="lookup" placeholder="0x 주소"><button id="lookup-btn" type="button" style="flex:0 0 auto">조회</button></div><div id="lookup-result"></div></section>
+<section class="card"><h2>2. 처리 요청</h2><div class="kind-tabs" role="group"><button type="button" data-kind="freeze" aria-pressed="true">동결</button><button type="button" data-kind="recover" aria-pressed="false">복구 (7일 뒤)</button><button type="button" data-kind="unfreeze" aria-pressed="false">동결 해제</button></div>
+<form id="form" class="grid" style="margin-top:14px"><label>사건 ID<input id="case" placeholder="case-1126" required></label>
+<label data-for="freeze">공개 사유<input id="reason" maxlength="200" placeholder="지갑 키 유출"></label>
+<label data-for="freeze unfreeze">대상 주소 (여러 개면 줄바꿈)<textarea id="addresses" rows="3" style="padding:12px;border-radius:9px;background:#102f33;color:white;border:1px solid #367568"></textarea></label>
+<label data-for="recover">동결된 해커 주소<input id="from"></label>
+<label data-for="recover">피해자 (줄마다 주소,금액)<textarea id="payments" rows="3" placeholder="0x피해자주소,40" style="padding:12px;border-radius:9px;background:#102f33;color:white;border:1px solid #367568"></textarea></label>
+<label data-for="recover" class="confirm-row"><input id="release" type="checkbox"><span>복구 후 동결 풀기 (남은 잔액을 해커가 다시 쓸 수 있음)</span></label>
+<label>확인 문구 <span id="phrase" class="frozen"></span><input id="confirmation" autocomplete="off"></label>
+<button>요청 보내기</button></form><p id="form-message"></p></section>
+<section class="card"><div class="head"><h2>3. 요청 기록</h2><button id="refresh" type="button">새로고침</button></div><div id="requests"></div></section>
+</main><script src="/admin-nav.js?v=10019"></script><script type="module" src="/incidents-admin.js?v=10019"></script></body></html>
